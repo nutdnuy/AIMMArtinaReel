@@ -5,6 +5,10 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkProject, deadBeats } from '../../skills/paim-reel/scripts/check.mjs';
+import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
+import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
+import { SAFE } from '../../skills/paim-reel/engine/layout.mjs';
+import { ENTER_DUR } from '../../skills/paim-reel/engine/motion.mjs';
 import { copyFixture, tempDir } from '../helpers.mjs';
 
 const SLOW = { timeout: 120_000 };
@@ -90,14 +94,118 @@ test('item over the caption fails', SLOW, async (t) => {
   assert.ok(c.overlaps.some((f) => f.problem === 'overlap' && f.kind === 'caption'), JSON.stringify(c.overlaps));
 });
 
-test('a very long headline produces a finding', SLOW, async (t) => {
+const LONG_HEADLINE = 'หุ้นกับกองทุนรวมอีทีเอฟต่างกันอย่างไรและควรเลือกแบบไหนดีสำหรับมือใหม่ที่เพิ่งเริ่มลงทุนเป็นครั้งแรก '.repeat(3);
+
+test('a very long headline leaves its zone: outside-safe on the headline', SLOW, async (t) => {
   const c = await checkProject(project(t, 'mini', (story) => {
-    story.scenes[0].headline = { text: 'หุ้นกับกองทุนรวมอีทีเอฟต่างกันอย่างไรและควรเลือกแบบไหนดีสำหรับมือใหม่ที่เพิ่งเริ่มลงทุนเป็นครั้งแรก '.repeat(3) };
+    story.scenes[0].headline = { text: LONG_HEADLINE };
   }));
   assert.equal(c.pass, false);
-  const findings = [...c.text, ...c.overlaps].filter((f) => f.kind === 'headline');
-  assert.ok(findings.length > 0, 'no finding on the headline');
-  assert.ok(problems(findings).every((p) => ['outside-safe', 'overlap'].includes(p)));
+  assert.ok(c.text.some((f) => f.kind === 'headline' && f.problem === 'outside-safe'), JSON.stringify(c.text));
+});
+
+test('a headline over an item is an overlap', SLOW, async (t) => {
+  // a normal headline (inside its zone), and an icon whose rect reaches into the headline zone
+  const c = await checkProject(project(t, 'mini', (story) => {
+    story.scenes[0].headline = { text: 'หุ้น vs ETF' };
+    story.scenes[0].items.push({ id: 'high', type: 'icon', icon: 'basket', color: 'green', at: 'l01', x: 540, y: 330 });
+  }));
+  assert.equal(c.pass, false);
+  assert.deepEqual(c.text, []);
+  assert.ok(
+    c.overlaps.some((f) => f.kind === 'headline' && f.problem === 'overlap' && f.item === 'high'),
+    JSON.stringify(c.overlaps),
+  );
+});
+
+test('a figure too wide for its chip is clipped', SLOW, async (t) => {
+  // ten digits in a small number item: the chip cannot fit even at its minimum size
+  const c = await checkProject(project(t, 'mini', (story) => {
+    story.scenes[0].items.push({ id: 'big', type: 'number', to: 1234567890, color: 'orange', source: 'test', at: 'l01', x: 540, y: 800, size: 120 });
+  }));
+  assert.equal(c.pass, false);
+  assert.ok(c.text.some((f) => f.kind === 'number' && f.problem === 'clipped'), JSON.stringify(c.text));
+});
+
+test('a pill that cannot fit its box is clipped', SLOW, async (t) => {
+  const c = await checkProject(project(t, 'mini', (story) => {
+    story.scenes[0].items.push({ id: 'tiny', type: 'pill', text: 'ผู้ถือหุ้นกู้รายย่อยทั่วไป', bg: 'green', at: 'l01', x: 540, y: 800, size: 60 });
+  }));
+  assert.equal(c.pass, false);
+  assert.ok(c.text.some((f) => f.kind === 'pill' && f.problem === 'clipped'), JSON.stringify(c.text));
+});
+
+test('item text pushed past the safe zone is outside-safe, not right-ui', SLOW, async (t) => {
+  // y 700 is above the phone-button column (it starts at y 1000), x 960 puts the pill across SAFE.x1
+  const c = await checkProject(project(t, 'mini', (story) => {
+    story.scenes[0].items.push({ id: 'edge', type: 'pill', text: 'ขอบจอ', bg: 'orange', at: 'l01', x: 960, y: 700 });
+  }));
+  assert.equal(c.pass, false);
+  assert.ok(c.text.some((f) => f.kind === 'pill' && f.text === 'ขอบจอ' && f.problem === 'outside-safe'), JSON.stringify(c.text));
+  assert.ok(!c.text.some((f) => f.problem === 'right-ui'), JSON.stringify(c.text));
+});
+
+// ---------- idle loops: the verdict must hold for the whole idle cycle, whatever the item's seed
+
+const LABEL = 'หุ้น';
+const SEEDS = 4; // dummy items in front of the test item shift its seed: 0, 1, 2, 3
+
+// Where the label of the first mini item rests, in canvas px, with its idle off.
+async function restLabelBottom(t, y) {
+  const dir = project(t, 'mini', (story) => {
+    Object.assign(story.scenes[0].items[0], { x: 150, y });
+  });
+  const { resolved } = await buildProject(dir);
+  const { page, close } = await openPage(dir);
+  try {
+    const boxes = await page.evaluate((s) => {
+      window.__paim.seek(s);
+      return window.__paim.textBoxes();
+    }, resolved.scenes[0].items[0].t + ENTER_DUR + 0.05);
+    const label = boxes.find((b) => b.kind === 'label' && b.text === LABEL);
+    return label.rect.y + label.rect.h;
+  } finally {
+    await close();
+  }
+}
+
+// mini whose first item sits at x 150 (clear of the captions) with its label resting `inset` px above the
+// bottom of SAFE, with the given idle and `seedShift` free icons in front of it.
+async function idleProject(t, idle, inset, seedShift) {
+  const y0 = 1300;
+  const y = y0 + (SAFE.y1 - inset - await restLabelBottom(t, y0));
+  return project(t, 'mini', (story) => {
+    const items = story.scenes[0].items;
+    Object.assign(items[0], { x: 150, y, idle });
+    for (let i = 0; i < seedShift; i += 1) {
+      items.unshift({ id: `d${i}`, type: 'icon', icon: 'basket', color: 'green', at: 'l01', x: 540, y: 700 });
+    }
+  });
+}
+
+// idle -> px the label rests inside SAFE: less than the loop's reach, so the item leaves SAFE during it
+const REST_INSIDE = { bob: 9, sway: 1, pulse: 2 };
+
+for (const [idle, inset] of Object.entries(REST_INSIDE)) {
+  test(`an item with idle ${idle} that leaves SAFE during its loop fails, for every seed`, SLOW, async (t) => {
+    for (let seed = 0; seed < SEEDS; seed += 1) {
+      const c = await checkProject(await idleProject(t, idle, inset, seed));
+      assert.equal(c.pass, false, `${idle}, seed shift ${seed}: ${JSON.stringify(c.text)}`);
+      assert.ok(c.text.some((f) => f.text === LABEL && f.problem === 'outside-safe'), `${idle}, seed shift ${seed}: ${JSON.stringify(c.text)}`);
+    }
+  });
+
+  test(`the same item with idle none passes (${idle} rest position)`, SLOW, async (t) => {
+    const c = await checkProject(await idleProject(t, 'none', inset, 0));
+    assert.equal(c.pass, true, JSON.stringify(c));
+  });
+}
+
+test('an item with idle bob 1 px inside the reach of its loop passes, for every seed', SLOW, async (t) => {
+  for (let seed = 0; seed < SEEDS; seed += 1) {
+    const c = await checkProject(await idleProject(t, 'bob', 11, seed));
+    assert.equal(c.pass, true, `seed shift ${seed}: ${JSON.stringify(c)}`);
+  }
 });
 
 test('CLI exit code', SLOW, (t) => {

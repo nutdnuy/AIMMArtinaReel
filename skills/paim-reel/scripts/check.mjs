@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { buildProject, exitWithError, isMain } from './build.mjs';
 import { openPage } from '../lib/serve.mjs';
 import { SAFE, RIGHT_UI, HEADLINE } from '../engine/layout.mjs';
-import { ENTER_DUR, NUMBER_DUR } from '../engine/motion.mjs';
+import { ENTER_DUR, NUMBER_DUR, BOB_PX, SWAY_DEG, PULSE_SCALE } from '../engine/motion.mjs';
 
 const MAX_GAP = 3.0; // s; a longer stretch with no new picture, headline or mark is a dead beat
 const SETTLE = 0.05; // s after an entrance ends, so overshoot and easing have finished
@@ -47,13 +47,49 @@ const inside = (r, zone) => r.x >= zone.x - TOLERANCE && r.y >= zone.y - TOLERAN
 const intersects = (a, b) => a.x + a.w > b.x + TOLERANCE && b.x + b.w > a.x + TOLERANCE
   && a.y + a.h > b.y + TOLERANCE && b.y + b.h > a.y + TOLERANCE;
 
+// The box of an item's text over a whole idle loop, as one rect, from its resting rect `r`. The loops
+// (motion.mjs) bob up and down, sway about the item's centre, or pulse in size about it, whatever the
+// item's seed: only the amplitude matters, so the result does not depend on when the box is measured.
+const SWAY_STEPS = 12; // angles tried between -SWAY_DEG and SWAY_DEG; a corner's extreme lies between them
+
+function idleReach(item, r) {
+  const c = { x: item.rect.x + item.rect.w / 2, y: item.rect.y + item.rect.h / 2 };
+  const corners = [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]];
+  const moved = [];
+  for (const [x, y] of corners) {
+    if (item.idle === 'bob') {
+      moved.push([x, y - BOB_PX], [x, y + BOB_PX]);
+    } else if (item.idle === 'pulse') {
+      for (const k of [1 - PULSE_SCALE, 1 + PULSE_SCALE]) moved.push([c.x + (x - c.x) * k, c.y + (y - c.y) * k]);
+    } else if (item.idle === 'sway') {
+      for (let i = 0; i <= SWAY_STEPS; i += 1) {
+        const a = ((-SWAY_DEG + (2 * SWAY_DEG * i) / SWAY_STEPS) * Math.PI) / 180;
+        const [dx, dy] = [x - c.x, y - c.y];
+        moved.push([c.x + dx * Math.cos(a) - dy * Math.sin(a), c.y + dx * Math.sin(a) + dy * Math.cos(a)]);
+      }
+    }
+  }
+  if (moved.length === 0) return r;
+  const xs = moved.map((p) => p[0]);
+  const ys = moved.map((p) => p[1]);
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+}
+
 // ---------- sample times
 
-// The moments to measure, as sorted unique seconds. Only settled moments: a pop starts at scale 0 and a
-// highlighted caption starts at 0.92, so the boxes of a half-drawn entrance say nothing about the layout.
+// When an item's entrance is over: a number also counts up, and its finished figure is the widest.
+const entranceEnd = (item) => item.t + (item.type === 'number' ? Math.max(ENTER_DUR, NUMBER_DUR) : ENTER_DUR);
+
+// The moments to measure, as a Map from seconds (rounded to 1 ms) to the ids of the items that moment is
+// meant for. Only settled moments: a pop starts at scale 0 and overshoots, a highlighted caption starts at
+// 0.92, so the boxes of a half-drawn entrance say nothing about the layout.
 function sampleTimes(R) {
-  const times = new Set();
-  const add = (t) => times.add(round3(t));
+  const times = new Map();
+  const add = (t, itemId) => {
+    const key = round3(t);
+    if (!times.has(key)) times.set(key, new Set());
+    if (itemId !== undefined) times.get(key).add(itemId);
+  };
   for (const cap of R.captions) {
     const mid = (cap.t0 + cap.t1) / 2;
     const grown = cap.t0 + CAPTION_GROW;
@@ -63,14 +99,12 @@ function sampleTimes(R) {
     const last = scene.t1 - MARGIN;
     for (const item of scene.items) {
       const clampTo = item.exitT === undefined ? last : Math.min(last, item.exitT - MARGIN);
-      // A number keeps changing its text until its count ends, and the finished figure is the widest.
-      const settled = item.t + (item.type === 'number' ? Math.max(ENTER_DUR, NUMBER_DUR) : ENTER_DUR) + SETTLE;
-      add(Math.max(item.t, Math.min(settled, clampTo)));
+      add(Math.max(item.t, Math.min(entranceEnd(item) + SETTLE, clampTo)), item.id);
     }
     if (scene.headline) add(Math.min(scene.headline.t + ENTER_DUR + SETTLE, last));
   }
   add((R.endCard.t0 + R.endCard.t1) / 2);
-  return [...times].sort((a, b) => a - b);
+  return new Map([...times].sort((a, b) => a[0] - b[0]));
 }
 
 // The items of the scene on screen at time t (an item shows from its t until its exitT).
@@ -82,14 +116,16 @@ function visibleItems(R, t) {
 
 // ---------- findings
 
-function findingsFor(t, box, items) {
+// `owner` is the item the text belongs to (or undefined); `box.rect` is its resting rect (idle loops off).
+function findingsFor(t, box, items, owner) {
   const text = [];
   const overlaps = [];
   const base = { t, kind: box.kind, text: box.text };
-  if (!inside(box.rect, SAFE_RECT) || (box.kind === 'headline' && !inside(box.rect, HEADLINE))) {
+  const reach = owner ? idleReach(owner, box.rect) : box.rect; // where the text goes during the item's idle loop
+  if (!inside(reach, SAFE_RECT) || (box.kind === 'headline' && !inside(box.rect, HEADLINE))) {
     text.push({ ...base, problem: 'outside-safe' });
   }
-  if (intersects(box.rect, RIGHT_UI_RECT)) text.push({ ...base, problem: 'right-ui' });
+  if (intersects(reach, RIGHT_UI_RECT)) text.push({ ...base, problem: 'right-ui' });
   if (box.clipped) text.push({ ...base, problem: 'clipped' });
   if (box.kind === 'caption' || box.kind === 'headline') {
     for (const item of items) {
@@ -116,16 +152,24 @@ export async function checkProject(projectDir, opts = {}) {
   const { page, close } = await openPage(projectDir);
   try {
     const font = await page.evaluate(() => window.__paim.fontUsed());
+    // Idle loops off: the boxes are then the resting ones, and idleReach() adds the loop's reach back, so
+    // the verdict does not depend on the item's seed (which only sets the phase of the loop).
+    await page.evaluate(() => {
+      for (const scene of window.__PAIM_DATA.resolved.scenes) for (const item of scene.items) item.idle = 'none';
+    });
     const text = [];
     const overlaps = [];
-    for (const t of sampleTimes(resolved)) {
+    for (const [t, due] of sampleTimes(resolved)) {
       const boxes = await page.evaluate((s) => {
         window.__paim.seek(s);
         return window.__paim.textBoxes();
       }, t);
       const items = visibleItems(resolved, t);
       for (const box of boxes) {
-        const found = findingsFor(t, box, items);
+        // An item's text is judged once its entrance is over (or at the moment chosen for that item).
+        const owner = items.find((item) => item.id === box.item);
+        if (owner && t < entranceEnd(owner) - 1e-6 && !due.has(owner.id)) continue;
+        const found = findingsFor(t, box, items, owner);
         text.push(...found.text);
         overlaps.push(...found.overlaps);
       }

@@ -113,7 +113,7 @@ function buildItem(item, parent, textColor) {
       const pill = el('div', 'pill text', art, item.text);
       pill.style.background = colorVar(item.bg);
       pill.style.color = colorVar(textColorOn(item.bg));
-      const entry = { kind: 'pill', el: pill, unfit: false };
+      const entry = { kind: 'pill', el: pill, item: item.id, unfit: false };
       v.texts.push(entry);
       v.fit = () => { entry.unfit = !fitFont(pill, fitsArt(pill, art, box), 64, 32); };
       break;
@@ -127,7 +127,7 @@ function buildItem(item, parent, textColor) {
       el('span', 'sizer', chip, numberAt(item, item.t));
       el('span', 'sizer', chip, numberAt(item, Infinity));
       const value = el('span', '', chip);
-      const entry = { kind: 'number', el: chip, textOf: () => value.textContent, unfit: false };
+      const entry = { kind: 'number', el: chip, item: item.id, textOf: () => value.textContent, unfit: false };
       v.texts.push(entry);
       v.update = (t) => { value.textContent = numberAt(item, t); };
       v.fit = () => { entry.unfit = !fitFont(chip, fitsArt(chip, art, box), 140, 56); };
@@ -151,7 +151,7 @@ function buildItem(item, parent, textColor) {
   if (hasText(item.label)) {
     const label = el('div', 'label text', box, item.label);
     label.style.color = colorVar(textColor);
-    v.texts.push({ kind: 'label', el: label });
+    v.texts.push({ kind: 'label', el: label, item: item.id });
   }
   return v;
 }
@@ -377,10 +377,11 @@ function seek(time) {
 
 function textBoxes() {
   const s = stage.getBoundingClientRect();
-  return shown.map(({ kind, el: node, textOf, unfit }) => {
+  return shown.map(({ kind, el: node, item, textOf, unfit }) => {
     const r = node.getBoundingClientRect();
     return {
       kind,
+      item, // the id of the item the text belongs to (undefined for headline, caption and end card)
       text: textOf ? textOf() : node.textContent,
       rect: { x: r.left - s.left, y: r.top - s.top, w: r.width, h: r.height },
       // `unfit`: an item's pill or chip that does not fit its art area even at the minimum size.

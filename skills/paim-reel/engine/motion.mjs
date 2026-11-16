@@ -55,14 +55,19 @@ export function enterState(kind, p) {
   return state;
 }
 
+// How far the idle loops reach from the resting position (the amplitudes of idleState below).
+export const BOB_PX = 10;
+export const SWAY_DEG = 3;
+export const PULSE_SCALE = 0.04;
+
 // Idle loop, `tSince` seconds after the item appeared; `seed` shifts the phase.
 export function idleState(kind, tSince, seed) {
   const state = { dx: 0, dy: 0, scale: 1, rot: 0 };
   switch (kind) {
     case 'none': break;
-    case 'bob': state.dy = 10 * Math.sin(TAU * tSince / 2.4 + seed); break;
-    case 'sway': state.rot = 3 * Math.sin(TAU * tSince / 3.0 + seed); break;
-    case 'pulse': state.scale = 1 + 0.04 * Math.sin(TAU * tSince / 1.6 + seed); break;
+    case 'bob': state.dy = BOB_PX * Math.sin(TAU * tSince / 2.4 + seed); break;
+    case 'sway': state.rot = SWAY_DEG * Math.sin(TAU * tSince / 3.0 + seed); break;
+    case 'pulse': state.scale = 1 + PULSE_SCALE * Math.sin(TAU * tSince / 1.6 + seed); break;
     default: throw new RangeError(`unknown idle "${kind}"`);
   }
   return state;
