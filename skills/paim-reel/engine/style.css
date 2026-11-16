@@ -1,0 +1,194 @@
+/* Page styles for the reel. Nothing here animates: runtime.mjs sets every moving value from t. */
+
+:root {
+  /* runtime.mjs overrides these from brand.json */
+  --orange: #F5820B;
+  --green: #14856D;
+  --charcoal: #252B31;
+  --cream: #FFFAF0;
+  --font: "Sukhumvit Set", "IBM Plex Sans Thai", sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: var(--charcoal);
+}
+
+#stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every text element. Sukhumvit Set's glyph box is 1.57 em tall and IBM Plex Sans Thai's 1.65 em,
+   with stacked marks (ปั๊ม, ผู้) inking up to 1.15 em above the baseline: at line-height 1.4 a vertical
+   padding of 0.18 em keeps the glyph box, and the marks, inside every text box and its pill. */
+.text {
+  --pad-y: 0.18em;
+  padding-top: var(--pad-y);
+  padding-bottom: var(--pad-y);
+  font-family: var(--font);
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* ---- background: 108 px grid at 6% of the text colour */
+.bg { position: absolute; inset: 0; }
+.bg.cream {
+  background-color: var(--cream);
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--charcoal) 6%, transparent) 2px, transparent 2px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--charcoal) 6%, transparent) 2px, transparent 2px);
+  background-size: 108px 108px;
+}
+.bg.charcoal {
+  background-color: var(--charcoal);
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--cream) 6%, transparent) 2px, transparent 2px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--cream) 6%, transparent) 2px, transparent 2px);
+  background-size: 108px 108px;
+}
+
+.scene-layer, .scene { position: absolute; inset: 0; }
+
+/* ---- headline: orange pill, charcoal text, centred in HEADLINE */
+.headline-zone, .caption-zone {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.headline {
+  max-width: 100%;
+  padding: var(--pad-y) 0.45em;
+  border-radius: 48px;
+  background: var(--orange);
+  color: var(--charcoal);
+  font-size: 96px;
+  font-weight: 700;
+}
+
+/* ---- caption: centred in CAPTION; a highlighted caption sits on an orange pill */
+.caption {
+  max-width: 100%;
+  padding: var(--pad-y) 0.4em;
+  border-radius: 40px;
+  font-size: 84px;
+  font-weight: 700;
+}
+.caption.hl { background: var(--orange); color: var(--charcoal); }
+
+/* ---- items: the box is the item's rect; art (icon, sprite, pill, number or bar) fills what the
+   label leaves, so labels in a row line up at the bottom of their rects */
+.item {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transform-origin: 50% 50%;
+}
+.art {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.art svg, .art img { display: block; width: 100%; height: 100%; }
+.art img { object-fit: contain; }
+.label {
+  flex: none;
+  max-width: 100%;
+  font-size: 52px;
+  font-weight: 700;
+}
+.pill {
+  flex: none;
+  max-width: 100%;
+  padding: var(--pad-y) 0.6em;
+  border-radius: 40px;
+  font-size: 64px;
+  font-weight: 700;
+}
+/* The hidden sizers hold the widest text of the count, so the chip does not jitter while counting. */
+.number {
+  flex: none;
+  display: inline-grid;
+  max-width: 100%;
+  padding: var(--pad-y) 0.3em;
+  border-radius: 40px;
+  font-size: 140px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.number > span { grid-area: 1 / 1; }
+.number > .sizer { visibility: hidden; }
+.track {
+  width: 100%;
+  height: 56px;
+  border-radius: 28px;
+  overflow: hidden;
+}
+.fill { height: 100%; border-radius: 28px; }
+.track.upright {
+  width: 120px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+.track.upright .fill { width: 100%; }
+
+/* ---- marks */
+.marks { position: absolute; left: 0; top: 0; overflow: visible; }
+.marks * { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- end card */
+.endcard { position: absolute; inset: 0; background: var(--green); }
+.endcard-body {
+  position: absolute;
+  left: 160px;
+  top: 300px;
+  width: 760px;
+  height: 1180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  color: var(--cream);
+}
+.follow { font-size: 120px; font-weight: 700; }
+.handle, .disclaimer { max-width: 100%; font-size: 40px; font-weight: 400; line-height: 1.5; }
+.logo { display: block; width: 240px; height: 240px; object-fit: contain; }
+
+/* ---- draft banner (estimated timing, no voice yet) */
+.draft {
+  position: absolute;
+  left: 0;
+  top: 130px;
+  width: 1080px;
+  display: flex;
+  justify-content: center;
+}
+.draft > div {
+  padding: var(--pad-y) 0.6em;
+  border-radius: 30px;
+  background: var(--orange);
+  color: var(--charcoal);
+  font-size: 40px;
+  font-weight: 700;
+}

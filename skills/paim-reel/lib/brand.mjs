@@ -1,25 +1,14 @@
 // Brand tokens: loading, validation and WCAG contrast helpers.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { BrandError, ALLOWED_PAIRS, textColorOn } from '../engine/colors.mjs';
 
-export class BrandError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'BrandError';
-  }
-}
+// The text-colour rules live in engine/colors.mjs so the browser page can use them too.
+export { BrandError, ALLOWED_PAIRS, textColorOn };
 
 const DEFAULT_BRAND_PATH = fileURLToPath(new URL('../brand.json', import.meta.url));
 const COLOR_NAMES = ['orange', 'green', 'charcoal', 'cream'];
 const HEX = /^#[0-9A-Fa-f]{6}$/;
-
-// Text colour on background: the only four text pairs the brand allows.
-export const ALLOWED_PAIRS = Object.freeze([
-  ['charcoal', 'cream'],
-  ['charcoal', 'orange'],
-  ['cream', 'charcoal'],
-  ['cream', 'green'],
-].map((pair) => Object.freeze(pair)));
 
 const isString = (v) => typeof v === 'string';
 
@@ -70,10 +59,4 @@ function luminance(hex) {
 export function contrast(hexA, hexB) {
   const [hi, lo] = [luminance(hexA), luminance(hexB)].sort((a, b) => b - a);
   return (hi + 0.05) / (lo + 0.05);
-}
-
-export function textColorOn(bg) {
-  const pair = ALLOWED_PAIRS.find(([, background]) => background === bg);
-  if (!pair) throw new BrandError(`no allowed text colour on ${bg}`);
-  return pair[0];
 }
