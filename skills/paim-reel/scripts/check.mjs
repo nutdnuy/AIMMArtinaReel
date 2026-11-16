@@ -80,6 +80,9 @@ function idleReach(item, r) {
 // When an item's entrance is over: a number also counts up, and its finished figure is the widest.
 const entranceEnd = (item) => item.t + (item.type === 'number' ? Math.max(ENTER_DUR, NUMBER_DUR) : ENTER_DUR);
 
+// When a scene's headline is measured: once its pop is over, or just before the scene ends.
+const headlineSample = (scene) => Math.min(scene.headline.t + ENTER_DUR + SETTLE, scene.t1 - MARGIN);
+
 // The moments to measure, as a Map from seconds (rounded to 1 ms) to the ids of the items that moment is
 // meant for. Only settled moments: a pop starts at scale 0 and overshoots, a highlighted caption starts at
 // 0.92, so the boxes of a half-drawn entrance say nothing about the layout.
@@ -101,7 +104,7 @@ function sampleTimes(R) {
       const clampTo = item.exitT === undefined ? last : Math.min(last, item.exitT - MARGIN);
       add(Math.max(item.t, Math.min(entranceEnd(item) + SETTLE, clampTo)), item.id);
     }
-    if (scene.headline) add(Math.min(scene.headline.t + ENTER_DUR + SETTLE, last));
+    if (scene.headline) add(headlineSample(scene));
   }
   add((R.endCard.t0 + R.endCard.t1) / 2);
   return new Map([...times].sort((a, b) => a[0] - b[0]));
@@ -169,6 +172,10 @@ export async function checkProject(projectDir, opts = {}) {
         // An item's text is judged once its entrance is over (or at the moment chosen for that item).
         const owner = items.find((item) => item.id === box.item);
         if (owner && t < entranceEnd(owner) - 1e-6 && !due.has(owner.id)) continue;
+        // A headline likewise: its pop overshoots the zone, so a caption sample during it says nothing.
+        const scene = resolved.scenes.find((s) => t >= s.t0 && t < s.t1);
+        if (box.kind === 'headline' && scene?.headline && t < scene.headline.t + ENTER_DUR - 1e-6
+          && t !== round3(headlineSample(scene))) continue;
         const found = findingsFor(t, box, items, owner);
         text.push(...found.text);
         overlaps.push(...found.overlaps);

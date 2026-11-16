@@ -16,22 +16,28 @@ export const CAPTION = Object.freeze({ x: 180, y: 1250, w: 720, h: 230 });
 export const CAPACITY = Object.freeze({ center: 1, row: 3, stack: 3, versus: 2, grid: 6 });
 
 const MID_X = CONTENT.x + CONTENT.w / 2; // 540
-const MID_Y = CONTENT.y + CONTENT.h / 2; // 800
 
 // Centre a run of `total` px of the given length inside [start, start + span].
 const centred = (start, span, total) => start + (span - total) / 2;
 
+// Row items are as tall as CONTENT allows while their labels end above y 980, clear of the
+// phone-button column (RIGHT_UI starts at y 1000) that the last slot's label would otherwise touch.
+const ROW_BOTTOM = 980;
+
 function rowRect(count, slot) {
   const gap = 30;
-  const w = Math.min(400, (CONTENT.w - gap * (count - 1)) / count);
-  const h = 460;
+  const w = Math.min(440, (CONTENT.w - gap * (count - 1)) / count);
+  const h = ROW_BOTTOM - CONTENT.y;
   const x0 = centred(CONTENT.x, CONTENT.w, count * w + gap * (count - 1));
-  return { x: x0 + slot * (w + gap), y: MID_Y - h / 2, w, h };
+  return { x: x0 + slot * (w + gap), y: CONTENT.y, w, h };
 }
+
+// Stack and versus slots are 760 wide (x 160 to 920): a label beside the picture stays clear of RIGHT_UI.
+const WIDE = 760;
 
 function stackRect(count, slot) {
   const gap = 24;
-  const w = 800;
+  const w = WIDE;
   const h = Math.min(240, (CONTENT.h - gap * (count - 1)) / count);
   const y0 = centred(CONTENT.y, CONTENT.h, count * h + gap * (count - 1));
   return { x: MID_X - w / 2, y: y0 + slot * (h + gap), w, h };
@@ -39,7 +45,7 @@ function stackRect(count, slot) {
 
 function versusRect(slot) {
   const gap = 40;
-  const w = 800;
+  const w = WIDE;
   const h = (CONTENT.h - gap) / 2;
   return { x: MID_X - w / 2, y: CONTENT.y + slot * (h + gap), w, h };
 }
@@ -68,7 +74,7 @@ export function slotRect(layout, count, slot) {
     throw new RangeError(`slot ${slot} is outside 0..${count - 1} for layout ${layout}`);
   }
   switch (layout) {
-    case 'center': return { x: MID_X - 300, y: MID_Y - 300, w: 600, h: 600 };
+    case 'center': return { x: MID_X - CONTENT.h / 2, y: CONTENT.y, w: CONTENT.h, h: CONTENT.h };
     case 'row': return rowRect(count, slot);
     case 'stack': return stackRect(count, slot);
     case 'versus': return versusRect(slot);

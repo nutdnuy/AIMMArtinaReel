@@ -116,6 +116,14 @@ html, body {
   font-size: 52px;
   font-weight: 700;
 }
+/* A picture in a wide versus or stack slot: a square art area at the slot's full height, the label beside
+   it, the pair centred in the slot. */
+.item.side { flex-direction: row; gap: 24px; }
+.item.side .art { flex: none; width: auto; height: 100%; aspect-ratio: 1; }
+.item.side .label { flex: 0 1 auto; min-width: 0; text-align: left; }
+/* A pill or number chip does not stretch its art area, so it sits right above its label, the pair centred
+   in the slot; a chip taller than the slot still shrinks the art area below it and reads as unfit. */
+.pill-item .art, .number-item .art { flex: 0 1 auto; }
 .pill {
   flex: none;
   max-width: 100%;

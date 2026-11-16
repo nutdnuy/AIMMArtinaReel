@@ -104,6 +104,17 @@ test('a very long headline leaves its zone: outside-safe on the headline', SLOW,
   assert.ok(c.text.some((f) => f.kind === 'headline' && f.problem === 'outside-safe'), JSON.stringify(c.text));
 });
 
+test('a headline is judged once its pop is over, not while a caption sample catches its overshoot', SLOW, async (t) => {
+  // a second scene from l02 with a headline at its start: the l02@0 caption midpoint (1.775 s) falls
+  // 0.175 s into the headline's pop, when the pill overshoots its zone
+  const c = await checkProject(project(t, 'mini', (story) => {
+    const etf = story.scenes[0].items.pop();
+    story.scenes.push({ id: 's2', from: 'l02', layout: 'center', headline: { text: 'ETF' }, items: [etf] });
+  }));
+  assert.deepEqual(c.text, []);
+  assert.equal(c.pass, true, JSON.stringify(c));
+});
+
 test('a headline over an item is an overlap', SLOW, async (t) => {
   // a normal headline (inside its zone), and an icon whose rect reaches into the headline zone
   const c = await checkProject(project(t, 'mini', (story) => {

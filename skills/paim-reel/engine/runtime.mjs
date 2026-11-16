@@ -97,8 +97,8 @@ function addImage(parent, className, src) {
   return img;
 }
 
-function buildItem(item, parent, textColor) {
-  const box = el('div', `item ${item.type}-item`, parent);
+function buildItem(item, parent, textColor, side) {
+  const box = el('div', `item ${item.type}-item${side ? ' side' : ''}`, parent);
   place(box, item.rect);
   const v = { item, box, texts: [], update: null, fit: null, opacity: 0 };
   switch (item.type) {
@@ -236,10 +236,16 @@ function buildMark(mark, svg, byId, textColor) {
   return { mark, g, refs, strokes };
 }
 
+// In the wide slots of versus and stack, a picture's label goes beside it rather than under it, so the
+// picture keeps the slot's full height.
+const SIDE_LAYOUTS = ['versus', 'stack'];
+const sideLabel = (scene, item) => SIDE_LAYOUTS.includes(scene.layout) && ['sprite', 'icon'].includes(item.type)
+  && hasText(item.label) && item.rect.w >= 1.8 * item.rect.h;
+
 function buildScene(scene) {
   const root = el('div', 'scene', view.scenesLayer);
   const textColor = textColorOn(scene.bg);
-  const items = scene.items.map((item) => buildItem(item, root, textColor));
+  const items = scene.items.map((item) => buildItem(item, root, textColor, sideLabel(scene, item)));
   const byId = new Map(items.map((v) => [v.item.id, v]));
   let headline = null;
   if (scene.headline) {

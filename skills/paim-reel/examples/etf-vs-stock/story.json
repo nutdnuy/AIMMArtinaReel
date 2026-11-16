@@ -1,0 +1,83 @@
+{
+  "slug": "etf-vs-stock",
+  "title": "หุ้นตัวเดียว หรือ ETF",
+  "highlight": ["l01@4", "l02@3", "l03@2", "l04@2", "l05@3", "l06@2", "l07@4", "l08@2", "l09@1", "l10@3", "l11@1", "l12@2"],
+  "scenes": [
+    {
+      "id": "hook", "from": "l01", "layout": "versus", "headline": {"text": "หุ้น หรือ ETF?"},
+      "items": [
+        {"id": "stock", "type": "sprite", "sprite": "building", "label": "หุ้นตัวเดียว", "at": "l01", "enter": "slide-l", "idle": "bob"},
+        {"id": "etf", "type": "sprite", "sprite": "basket", "label": "ETF ทั้งตะกร้า", "at": "l01@2", "enter": "slide-r", "idle": "bob"}
+      ]
+    },
+    {
+      "id": "one-company", "from": "l02", "layout": "row", "headline": {"text": "หุ้นรายตัว"},
+      "items": [
+        {"id": "company", "type": "sprite", "sprite": "building", "label": "บริษัทเดียว", "at": "l02@2"},
+        {"id": "grow", "type": "sprite", "sprite": "chart-up", "label": "โตตาม", "at": "l03", "enter": "rise"},
+        {"id": "money", "type": "sprite", "sprite": "coins", "label": "เงินเรา", "at": "l03@1", "enter": "drop", "idle": "bob"}
+      ],
+      "marks": [
+        {"type": "arrow", "from": "company", "to": "grow", "at": "l03@2"}
+      ]
+    },
+    {
+      "id": "stumble", "from": "l04", "layout": "row", "bg": "charcoal",
+      "items": [
+        {"id": "company", "type": "sprite", "sprite": "building", "label": "สะดุด", "at": "l04", "idle": "sway"},
+        {"id": "down", "type": "icon", "icon": "trend-down", "color": "orange", "label": "ทั้งก้อน", "at": "l04@2", "enter": "drop"}
+      ],
+      "marks": [
+        {"type": "cross", "on": "company", "at": "l04@1"}
+      ]
+    },
+    {
+      "id": "basket", "from": "l05", "layout": "row", "headline": {"text": "ETF = ตะกร้าหุ้น", "at": "l05@1"},
+      "items": [
+        {"id": "etf", "type": "sprite", "sprite": "basket", "label": "หลายตัว", "at": "l05@3", "idle": "bob"},
+        {"id": "once", "type": "pill", "text": "ครบทั้งตะกร้า", "bg": "green", "at": "l06@2", "enter": "rise"}
+      ],
+      "marks": [
+        {"type": "ring", "on": "etf", "at": "l05@5"}
+      ]
+    },
+    {
+      "id": "set50", "from": "l07", "layout": "row", "headline": {"text": "ดัชนี SET50"},
+      "items": [
+        {"id": "index", "type": "sprite", "sprite": "basket", "label": "SET50", "at": "l07", "idle": "bob"},
+        {"id": "count", "type": "number", "to": 50, "color": "orange", "label": "หุ้นใหญ่", "at": "l07@2",
+         "source": "SET50 index profile, The Stock Exchange of Thailand: \"50 large-market capitalization securities with high trading liquidity\". https://www.set.or.th/en/market/index/set50/profile (accessed 2026-11-16)"}
+      ],
+      "marks": [
+        {"type": "arrow", "from": "index", "to": "count", "at": "l07@4"}
+      ]
+    },
+    {
+      "id": "spread", "from": "l08", "layout": "row",
+      "items": [
+        {"id": "drop", "type": "icon", "icon": "trend-down", "color": "orange", "label": "ตัวหนึ่งร่วง", "at": "l08"},
+        {"id": "etf", "type": "sprite", "sprite": "basket", "label": "ยังพยุง", "at": "l08@2", "idle": "bob"},
+        {"id": "safe", "type": "icon", "icon": "shield-check", "color": "green", "label": "กระจายเสี่ยง", "at": "l09@1", "enter": "rise", "idle": "pulse"}
+      ],
+      "marks": [
+        {"type": "arrow", "from": "drop", "to": "etf", "at": "l08@1"}
+      ]
+    },
+    {
+      "id": "fee", "from": "l10", "layout": "center", "bg": "charcoal", "headline": {"text": "มีค่าธรรมเนียม"},
+      "items": [
+        {"id": "fee", "type": "icon", "icon": "receipt", "color": "orange", "label": "จ่ายทุกปี", "at": "l10@3", "idle": "sway"}
+      ]
+    },
+    {
+      "id": "takeaway", "from": "l11", "layout": "versus", "headline": {"text": "แบบไหนเหมาะกับเรา"},
+      "items": [
+        {"id": "pick", "type": "sprite", "sprite": "building", "label": "ชอบเลือกเอง", "at": "l11@1", "enter": "slide-l"},
+        {"id": "spread", "type": "sprite", "sprite": "basket", "label": "อยากกระจาย", "at": "l12", "enter": "slide-r", "idle": "bob"}
+      ],
+      "marks": [
+        {"type": "ring", "on": "spread", "at": "l12@3"}
+      ]
+    }
+  ]
+}

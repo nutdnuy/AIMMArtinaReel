@@ -70,7 +70,7 @@ test('items carry defaults, a rect, the slot they fill and a story-wide seed', (
   const [a, b] = [r.scenes[0].items[0], r.scenes[1].items[0]];
   assert.deepEqual([a.enter, a.idle, a.weight], ['pop', 'none', 'fill']);
   assert.deepEqual([a.seed, b.seed], [0, 1]);
-  assert.deepEqual(a.rect, { x: 240, y: 500, w: 600, h: 600 });
+  assert.deepEqual(a.rect, { x: 180, y: 440, w: 720, h: 720 });
   assert.equal(r.scenes[0].t1, 1.6);
   assert.equal(r.scenes[1].t0, 1.6);
   assert.equal(r.scenes[1].t1, 3.0);
@@ -100,7 +100,7 @@ test('an item with x and y takes no slot and does not count toward capacity', ()
   const sc = validateStory(s, T, brand).scenes[0];
   assert.deepEqual(sc.items[2].rect, { x: 490, y: 950, w: 100, h: 100 });
   assert.equal(sc.items[2].x, undefined);
-  assert.deepEqual(sc.items[1].rect, { x: 140, y: 820, w: 800, h: 340 }, 'slots count only the other two');
+  assert.deepEqual(sc.items[1].rect, { x: 160, y: 820, w: 760, h: 340 }, 'slots count only the other two');
   assert.equal(sc.items[0].rect.y + sc.items[0].rect.h <= 800, true);
   const t = structuredClone(s);
   t.scenes[0].items.splice(1, 0, { id: 'c', type: 'pill', text: 'x', bg: 'green', at: 'l02' });
