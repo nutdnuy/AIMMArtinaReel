@@ -68,9 +68,11 @@ project with `script.proposed.md` and no `script.md` → voice mode (step 4), wi
 
 ## 4. Voice mode
 
-First: `script.proposed.md` exists and `script.md` does not → skip 4.1–4.2 (the voice is already
-prepared and transcribed). If her message is her answer to that proposal, apply it as in 4.3 and
-continue at 4.4; otherwise go straight to the pending-confirmation stop in 4.3.
+First: `script.proposed.md` exists, `script.md` does not, and no new audio file came with this
+message → skip 4.1–4.2 (the voice is already prepared and transcribed). Her answer is a message
+with no audio that confirms or edits lines: apply it as in 4.3 and continue at 4.4. Anything else:
+go straight to the pending-confirmation stop in 4.3. A new audio file is a new take: remove
+`script.proposed.md`, tell her the old proposal is dropped, and run 4.1–4.2 on the new file.
 
 1. `<skill>/.venv/bin/python <skill>/scripts/prep_voice.py <audio> <project>` →
    `voice/voice.wav` (mono 48 kHz, 0.25 s lead-in, pauses over 0.45 s cut to 0.45 s, end
@@ -178,6 +180,7 @@ Send the MP4 and its preview (topic mode: also the read-aloud sheet) and report:
 - Guessing words the recogniser could not read, or taking them from `examples/`.
 - Text-to-speech, a cloned voice, or any voice but P.AIM's own recording.
 - Writing into the skill folder.
-- Sending the recording or the script to any service; only the short sprite descriptions go to
-  the image tool.
+- Sending the recording or its transcript to any service: the voice file and the speech-to-text
+  stay on this machine. You read the script text in this chat; only the short sprite descriptions
+  go to the image tool; fact-check searches go to the web.
 - Typing a password, API key or login code for the user, or storing one. She signs in herself.

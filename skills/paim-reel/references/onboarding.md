@@ -46,8 +46,9 @@ The Thai sentences below say พี่เอม; say her `display_name` instead 
   > การตั้งค่ายังค้างอยู่ค่ะ ขอทำต่อจากตรงที่ค้างไว้เลยนะคะ
 - If `profile.mjs show` exits 1 with `is not valid JSON` or `must hold a JSON object`, the
   settings file is damaged and `doctor.sh` will wrongly say nothing was chosen. Tell her plainly,
-  ask once whether to start the settings over, and only after her yes run
-  `profile.mjs reset --yes` and begin at section 2.
+  ask once whether to set up again, and only after her yes move the file aside (nothing is
+  deleted): `mv "<config dir>/profile.json" "<config dir>/profile.json.bak"`. Then begin at
+  section 2.
 
 ## 2. Welcome
 
@@ -117,6 +118,8 @@ Ask, in one message:
 > ต่อไปเป็นเรื่องภาพค่ะ ผู้ช่วยตัวนี้วาดรูปเองไม่ได้ เลยต้องยืมโปรแกรมช่วยวาดภาพมาใช้ มีให้เลือกสองทางค่ะ
 > 1. Codex CLI ของ OpenAI ใช้บัญชี ChatGPT ทางนี้แนะนำค่ะ ตอนทดลองวาดได้สวยและตรงสีของแบรนด์
 > 2. โปรแกรมช่วยวาดภาพของ Google ใช้บัญชี Google ทางนี้ก็วาดได้ แต่ภาพที่ได้ยังไม่เรียบร้อยเท่าค่ะ
+>
+> ผลที่เครื่องของพี่เอมอาจต่างจากตอนทดลองได้นะคะ เลือกแล้วจะลองวาดภาพทดสอบหนึ่งภาพ ถ้าไม่ได้ผลก็เปลี่ยนไปอีกทางได้ค่ะ
 >
 > พี่เอมสะดวกใช้ทางไหนคะ
 
@@ -295,6 +298,6 @@ Confirm the change in one sentence and stop; `onboarded_at` stays as it is. Run
 `profile.mjs reset --yes` only when she explicitly asks to start everything from zero, and only
 after she confirms once more:
 
-> จะลบการตั้งค่าทั้งหมดแล้วเริ่มใหม่ตั้งแต่ต้อง ใช่ไหมคะ
+> จะลบการตั้งค่าทั้งหมดแล้วเริ่มใหม่ตั้งแต่ต้น ใช่ไหมคะ
 
 After the reset, begin again at section 2.
