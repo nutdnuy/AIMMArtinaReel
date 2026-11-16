@@ -124,7 +124,13 @@ def public_connection(address, timeout, source_address=None):
 
 
 class PublicHTTPSConnection(http.client.HTTPSConnection):
-    _create_connection = staticmethod(public_connection)
+    """An https connection that opens its socket with public_connection. The assignment follows super().__init__,
+    which sets the instance's own _create_connection and would shadow a class attribute. TLS is untouched: the
+    certificate and host name are still checked against the name in the URL (self.host)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._create_connection = public_connection
 
 
 class PublicHTTPSHandler(urllib.request.HTTPSHandler):

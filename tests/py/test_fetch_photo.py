@@ -2,6 +2,8 @@ import hashlib
 import io
 import json
 import os
+import ssl
+import socket
 import subprocess
 import sys
 import threading
@@ -12,6 +14,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PIL import Image
+
+import fetch_photo
 
 FETCH = Path(__file__).resolve().parents[2] / "skills" / "paim-reel" / "scripts" / "fetch_photo.py"
 PAGE = "https://commons.example/wiki/File:Thing.jpg"
@@ -492,3 +496,46 @@ def test_an_unresolvable_https_host_is_reported_as_unreachable_not_a_crash(proje
     r = fetch(project, "bank", "https://no-such-host.invalid/x.jpg")
     assert r.returncode == 1 and "could not download" in r.stderr and "Traceback" not in r.stderr
     assert nothing_written(project)
+
+
+# ---------- fix round 2: the connection itself checks the address it connects to
+
+PUBLIC, LOOPBACK = "93.184.216.34", "127.0.0.1"
+
+
+def fake_getaddrinfo(answers, calls):
+    """getaddrinfo that gives each call the next answer (the last one repeats): a name that changes its address."""
+    def fake(host, port, *args, **kwargs):
+        calls.append(host)
+        ip = answers[min(len(calls), len(answers)) - 1]
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port or 443))]
+    return fake
+
+
+def test_the_connection_refuses_a_name_that_now_resolves_to_a_local_address(monkeypatch):
+    url = "https://rebind.example/x.jpg"
+    lookups, connects = [], []
+    monkeypatch.setattr(fetch_photo.socket, "getaddrinfo", fake_getaddrinfo([PUBLIC, LOOPBACK], lookups))
+    real = fetch_photo.public_connection
+    monkeypatch.setattr(fetch_photo, "public_connection", lambda *a, **k: (connects.append(a[0]), real(*a, **k))[1])
+    fetch_photo.check_url(url, "image URL")   # the early check sees the public address
+    assert lookups == ["rebind.example"]
+    with pytest.raises(fetch_photo.Refused, match="private or local address"):
+        fetch_photo.get(url)                  # the connection looks the name up again and sees the loopback
+    assert connects == [("rebind.example", 443)], "the fetch connected through public_connection"
+    assert len(lookups) == 2
+
+
+def test_the_connection_used_for_a_fetch_verifies_the_certificate_and_the_host_name(monkeypatch):
+    seen = []
+
+    def stop(self):
+        seen.append(self)
+        raise OSError("stopped before connecting")
+    monkeypatch.setattr(fetch_photo.PublicHTTPSConnection, "connect", stop)
+    with pytest.raises(fetch_photo.Unreachable):
+        fetch_photo.get("https://verify.example/x.jpg")
+    [conn] = seen
+    assert isinstance(conn, fetch_photo.PublicHTTPSConnection)
+    assert conn._context.verify_mode == ssl.CERT_REQUIRED and conn._context.check_hostname is True
+    assert conn.host == "verify.example", "the certificate is checked against the name in the URL"
