@@ -87,12 +87,14 @@ test('privacy is described accurately: nothing claims "sent nowhere"', () => {
 });
 
 test('SKILL.md voice mode: a new recording replaces a pending proposal', () => {
-  const step4 = section(read('SKILL.md'), 4);
-  const first = step4.split('\n\n')[1];
-  assert.match(first, /script\.proposed\.md/, 'the first paragraph is the pending-proposal rule');
-  assert.match(first, /no new audio file/i, 'the skip applies only when no new audio file came');
-  assert.match(first, /remove\s+`script\.proposed\.md`/, 'a new audio file drops the old proposal');
-  assert.match(first, /no audio/i, 'an answer is told apart as a message with no audio');
+  // the first paragraph is the normal case; the two special cases follow it
+  const paragraphs = section(read('SKILL.md'), 4).split('\n\n').slice(1);
+  assert.match(paragraphs[0], /4\.1/, 'the first paragraph is the fresh recording');
+  const special = paragraphs.slice(1, 3).join(' ');
+  assert.match(special, /script\.proposed\.md/, 'the special cases are the pending-proposal rule');
+  assert.match(special, /no audio file/i, 'the skip applies only when no audio file came');
+  assert.match(special, /remove\s+`script\.proposed\.md`/, 'a new audio file drops the old proposal');
+  assert.match(special, /no audio/i, 'an answer is told apart as a message with no audio');
 });
 
 test('SKILL.md routes step 0 to onboarding and its description says ตั้งค่า', () => {
@@ -110,7 +112,10 @@ test('onboarding tells her about effects, web photos, unknown licences and Studi
   assert.match(thai, /เสียงเอฟเฟกต์/, 'clips have sound effects');
   assert.match(thai, /รูปถ่าย[^\n]*เว็บ/, 'real things are shown with photos from the web');
   assert.match(thai, /ไม่รู้[^\n]*สิทธิ์[^\n]*ลิขสิทธิ์[^\n]*(ตัดสินใจ|การตัดสินใจ)/, 'an unknown-licence photo may be copyrighted and is her decision');
-  assert.match(thai, /รายชื่อที่มาของรูป|ที่มาของรูป/, 'a credits file comes with the clip');
+  assert.match(thai, /ไฟล์บอกที่มาของรูป/, 'a credits file comes with the clip');
+  assert.doesNotMatch(thai, /รายชื่อที่มาของรูป/, 'the old wording is gone');
+  assert.match(thai, /จะใช้รูปนั้นหรือไม่ พี่เอมเป็นผู้ตัดสินใจค่ะ/, 'which picture is used is hers to decide');
+  assert.doesNotMatch(thai, /จะใช้ต่อหรือไม่|เป็นคนตัดสินใจ/);
   assert.match(thai, /100 MB/, 'the first Studio opening downloads about 100 MB');
   assert.match(thai, /ปิด[^\n]*เอง/, 'Studio is hers to close');
   assert.match(thai, /แก้เอง[^\n]*ส่งออก/, 'a clip changed by hand is exported from Studio');
@@ -137,6 +142,10 @@ test('cheat sheet: change a picture, open for hand edits, the Studio export and 
   assert.match(text, /แก้เอง[^\n]*ส่งออก/, 'a clip changed by hand is exported from the editor');
   assert.match(text, /100 MB/, 'the first opening downloads about 100 MB');
   assert.match(text, /ไม่รู้[^\n]*สิทธิ์[^\n]*ลิขสิทธิ์/, 'unknown-licence photos may be copyrighted');
+  assert.match(text, /ไฟล์บอกที่มาของรูป/, 'the credits file is named plainly');
+  assert.doesNotMatch(text, /รายชื่อที่มาของรูป/);
+  assert.match(text, /"เปิดให้แก้เอง" เมื่ออยากแก้คลิปฉบับเต็มที่มีเสียงพี่เอมแล้วด้วยตัวเอง/, 'a draft has effects, so the full clip is meant');
+  assert.doesNotMatch(text, /คลิปที่มีเสียงแล้ว/);
   assert.match(text, /ค้น[^\n]*รูป[^\n]*เว็บ|รูป[^\n]*ค้น[^\n]*เว็บ/, 'photo searches go to the web');
   assert.ok((text.match(/Studio/g) ?? []).length <= 1, 'the editor is named once, then in plain Thai');
 });

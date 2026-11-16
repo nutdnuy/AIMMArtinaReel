@@ -173,7 +173,9 @@ Then, after she says it is open, the step for her choice:
    - Antigravity CLI: `profile.mjs set image_cli gemini`, then
      `profile.mjs set image_cmd "agy --dangerously-skip-permissions"` (that exact string).
    - Gemini CLI: `profile.mjs set image_cli gemini`, then `profile.mjs set image_cmd null`.
-2. `doctor.sh --agent claude` must now print `image-cli: ok codex` or `image-cli: ok gemini`.
+2. `doctor.sh --agent claude` must now print `image-cli: ok codex` (Codex CLI), `image-cli: ok gemini`
+   (Gemini CLI) or `image-cli: ok custom command` (the Antigravity CLI is saved as a command, so it
+   always prints this, as does any `PAIM_IMAGE_CMD`).
    `MISSING image-cli (agy not found)` right after installing the Antigravity CLI means this
    session started before the program was added: ask her to close and reopen this app, then say
    "ทำต่อค่ะ". Do not change her shell settings yourself.
@@ -278,8 +280,8 @@ First tell her, in one message, what comes with every clip (pictures from the we
 > ก่อนจบ ขอเล่าสามเรื่องที่ควรรู้นะคะ
 > เรื่องแรก ทุกคลิปมีเสียงเอฟเฟกต์เบา ๆ ตอนภาพขึ้นและตอนเปลี่ยนฉาก เสียงพี่เอมจะดังกว่าเสมอค่ะ
 > เรื่องที่สอง ของจริงที่มีชื่อเรียก เช่น ตึก ธนบัตร หรือสถานที่ ผู้ช่วยจะค้นรูปถ่ายจากเว็บมาใส่ให้ รูปบนเว็บส่วนใหญ่มีเจ้าของค่ะ
-> รูปไหนที่ไม่รู้ว่าเจ้าของให้สิทธิ์ใช้หรือไม่ อาจติดลิขสิทธิ์ได้ ผู้ช่วยจะแจ้งรูปเหล่านั้นทุกครั้ง จะใช้ต่อหรือไม่ พี่เอมเป็นคนตัดสินใจค่ะ
-> คลิปที่มีรูปจากเว็บ จะมีไฟล์รายชื่อที่มาของรูปแนบไปด้วยทุกครั้งค่ะ
+> รูปไหนที่ไม่รู้ว่าเจ้าของให้สิทธิ์ใช้หรือไม่ อาจติดลิขสิทธิ์ได้ ผู้ช่วยจะแจ้งรูปเหล่านั้นทุกครั้ง จะใช้รูปนั้นหรือไม่ พี่เอมเป็นผู้ตัดสินใจค่ะ
+> คลิปที่มีรูปจากเว็บ จะมีไฟล์บอกที่มาของรูปแนบไปด้วยทุกครั้งค่ะ
 > เรื่องที่สาม คลิปที่มีเสียงพี่เอมแล้ว เปิดแก้เองได้ในโปรแกรม OpenFilm Studio ซึ่งเป็นโปรแกรมแก้คลิปที่เปิดในหน้าเว็บบนเครื่องนี้ค่ะ คลิปร่างยังเปิดแก้ไม่ได้นะคะ
 > ครั้งแรกที่เปิด เครื่องต้องดาวน์โหลดประมาณ 100 MB ผู้ช่วยจะถามพี่เอมก่อนค่ะ
 > โปรแกรมแก้คลิปเป็นของพี่เอม ผู้ช่วยจะไม่ปิดให้ แก้เสร็จแล้วพี่เอมปิดเองได้เลยค่ะ

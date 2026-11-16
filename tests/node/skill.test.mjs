@@ -134,9 +134,90 @@ test('the references say what to do on a refused fetch, how loud a file can end,
     assert.ok(line.length <= 110, `story-json.md: the loudness lines are wrapped: ${line.slice(0, 60)}`);
   }
   const openfilm = readFileSync(join(SKILL, 'references', 'openfilm.md'), 'utf8');
-  assert.doesNotMatch(openfilm, /\bI\b|\b[Mm]y\b/, 'openfilm.md has no first person');
+  assert.doesNotMatch(openfilm, /\bI\b|\b[Mm]y\b|\b[Oo]ur\b|\b[Ww]e\b/, 'openfilm.md has no first person');
   assert.doesNotMatch(openfilm, /byte for byte/);
   assert.match(openfilm, /the same picture/);
+});
+
+// ---- revision 1: rules restored after the compaction, and what the acceptance run showed was missing ----
+
+const flat = (text) => text.replace(/\s+/g, ' ');
+const stepText = (n) => flat(skillSection(`${n}.`));
+const refText = (name) => flat(readFileSync(join(SKILL, 'references', name), 'utf8'));
+
+test('step 6.2: a drawing tool that keeps failing sends her to section 4 of onboarding.md in plain Thai', () => {
+  const step6 = stepText(6);
+  assert.match(step6, /scripts\/image_cli\.py test` \(same `--agent`\) says why: tell her that sentence in plain Thai and do section 4 of `references\/onboarding\.md`/);
+});
+
+test('step 4.3 and script-style.md: the proposal keeps the lNN: line format; only [?] stands for an unreadable word', () => {
+  const step4 = stepText(4);
+  assert.match(step4, /`<project>\/script\.proposed\.md` \(never `script\.md`\) as `lNN:` lines \(`timing\.py` reads only those\)/, 'SKILL.md: lNN: lines like script.md');
+  assert.match(step4, /write `\[\?\]` and nothing else \(your best guesses go in your message to her, labelled as guesses, never in the file\)/i, 'SKILL.md: guesses go in the message');
+  const style = refText('script-style.md');
+  assert.match(style, /It keeps the `lNN:` line format of `script\.draft\.md` and `script\.md`; `timing\.py` reads only those lines/);
+  assert.match(style, /holds only `\[\?\]` for a word you cannot read[^.]*best guesses go in your message to her, labelled as guesses, never in the file/i);
+});
+
+test('step 4 reads the normal fresh recording first, then the two special cases', () => {
+  const [normal, ...rest] = skillSection('4.').trim().split('\n\n').slice(1).map(flat);
+  assert.match(normal, /4\.1/);
+  assert.doesNotMatch(normal, /script\.proposed\.md/, 'the first paragraph is the fresh case');
+  const special = rest.join(' ');
+  assert.match(special, /no audio file/i, 'the skip applies only when no audio file came');
+  assert.match(special, /remove `script\.proposed\.md`[^.]*old proposal is dropped/, 'a new audio file drops the old proposal');
+  assert.match(special, /with no audio|no audio/i);
+  assert.match(special, /apply it as in 4\.3/);
+});
+
+test('step 9: no hand-off after WARN openfilm, a Studio address is read from the output and never saved, 100 MB is asked once', () => {
+  const deliver = stepText(9);
+  assert.match(deliver, /If `doctor\.sh` printed `WARN openfilm`, skip the hand-off and tell her why/);
+  assert.doesNotMatch(deliver, /after `WARN openfilm` say there is none/);
+  assert.match(deliver, /directly: read the address from its output, never redirect or save that output/i);
+  assert.match(deliver, /Before the first Studio opening of a conversation[^.]*about 100 MB[^.]*not been used on this machine[^.]*ask/);
+  const ref = refText('openfilm.md');
+  assert.match(ref, /Run `open_studio\.sh` directly and read the address from its output; never redirect or save that output/);
+  assert.match(ref, /Before the first `open_studio\.sh` of a conversation[^.]*about 100 MB[^.]*not been used on this machine[^.]*ask/);
+  assert.doesNotMatch(ref, /_npx|npm config get cache/, 'the npx-cache test is gone');
+});
+
+test('step 8: how to know a final has effects', () => {
+  assert.match(stepText(8), /a final has them when `<project>\/build\/sfx\.wav` exists and `story\.sfx` is not `false`/);
+});
+
+test('steps 3.3 and 4.1 say the estimate is a floor and where prep_voice.py is described', () => {
+  assert.match(stepText(3), /\(the estimate is a floor; real speech runs longer\)/);
+  assert.match(stepText(4), /prep_voice\.py[\s\S]*?\(what it does to the take: `references\/script-style\.md`\)/);
+});
+
+test('script-style.md: ๆ stays attached, the spoken form she used, digits as read aloud, a low ratio with no LOW line', () => {
+  const style = refText('script-style.md');
+  assert.match(style, /`ๆ` stays attached to its word \(`แบบง่ายๆ`\)[^.]*never a phrase by itself/);
+  assert.match(style, /keep the spoken form she used[^.]*`นึง`[^.]*`ง่ายๆ`/i);
+  assert.match(style, /digits in the draft[^.]*written as the words that were read aloud/i);
+  assert.match(style, /lowest ratio under 0\.75 with no `LOW` line, look at that line in `script\.draft\.md`/i);
+  assert.ok(/^## A low ratio without a LOW line$/m.test(readFileSync(join(SKILL, 'references', 'script-style.md'), 'utf8')), 'the heading step 4.4 points to exists');
+  assert.match(style, /recogniser noise[^.]*keep her confirmed text[^.]*delivery note[^.]*could not be checked by ear/i);
+});
+
+test('story-json.md and step 9: your own headlines add no claim or figure, and are listed so she can change them', () => {
+  const story = refText('story-json.md');
+  assert.match(story, /own words[^.]*add no claim and no figure/i);
+  assert.match(story, /listed in the delivery note[^.]*change/i);
+  assert.match(story, /figure she spoke without naming its source[^.]*once a source is found/i);
+  assert.match(stepText(9), /headline[^.;]*you (?:worded|wrote)[^.;]*(change|listed)/i);
+  assert.match(stepText(9), /could not be checked by ear/i, 'the delivery note says when a line was not checked by ear');
+});
+
+test('the example photo\'s label adds something to the headline above it', () => {
+  for (const sc of story().scenes) {
+    const headline = sc.headline?.text.replace(/\s/g, '');
+    for (const item of sc.items.filter((i) => i.type === 'photo' && i.label)) {
+      const label = item.label.replace(/\s/g, '');
+      assert.ok(!headline || !headline.includes(label), `${sc.id}: the photo label "${item.label}" repeats the headline`);
+    }
+  }
 });
 
 test('every scripts/ and references/ path SKILL.md mentions exists', () => {

@@ -2,7 +2,7 @@
 
 After the MP4 is delivered, the reel is also exported as an OpenFilm project and opened in OpenFilm
 Studio (github.com/openfilm/openfilm, MIT), a video editor that runs in the browser, so that P.AIM can
-change it by hand. Our own renderer (`render.mjs`) still makes the MP4; Studio is an extra, not a
+change it by hand. The skill's renderer (`render.mjs`) still makes the MP4; Studio is an extra, not a
 replacement. Everything here was learnt from OpenFilm 0.3.2 (`npx -y openfilm@latest --version`), by
 reading what the tool prints and by using Studio on an exported reel. Where this file says "not
 checked", nobody has looked: do not promise it to her.
@@ -21,16 +21,18 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
 - Needs Node 22.2 or newer (`doctor.sh` prints `openfilm: ok` or `WARN openfilm (needs Node 22.2 or
   newer)`; on a WARN skip the hand-off and say so) and, the first time, a download of the OpenFilm
   package and a headless Chromium (about 100 MB) through `npx -y openfilm@latest`.
-- Before the first opening, ask her: say it downloads about 100 MB and takes a few minutes, and wait
-  for her yes. It is the first opening when
-  `ls -d "$(npm config get cache)"/_npx/*/node_modules/openfilm` finds nothing (npx keeps the package
-  there once it has downloaded it). When she says no, the MP4 is still the finished reel.
+- Before the first `open_studio.sh` of a conversation, tell her Studio may need to download about 100 MB
+  (a few minutes) if it has not been used on this machine, and ask; wait for her yes. Nothing reliable
+  says whether it was used here before (another user's cache, a new OpenFilm version and the headless
+  browser all change it), so ask each conversation. When she says no, the MP4 is still the finished reel.
 - `open_studio.sh` prints Studio's address and returns at once; Studio keeps running in the background
   on this computer (127.0.0.1). It may be a Studio she already has open with other films in it, so:
   Studio is hers; never stop or restart it. She closes it herself. (A command that stalls is stopped,
   with everything it started, after 3 minutes; a Studio that did start is left running.)
-- The address Studio prints contains a local session key. Give it to her once, in the chat only. Never
-  write it into a file, a note, a log, a commit message or the delivery note.
+- The address Studio prints contains a local session key. Run `open_studio.sh` directly and read the
+  address from its output; never redirect or save that output (no `>`, no `tee`). Give the address to
+  her once, in the chat only. Never write it into a file, a note, a log, a commit message or the
+  delivery note.
 - The export makes no network call and needs no sign-in. Studio also has features that use online
   services (making voice-over, music, pictures; transcripts). Do not use them: her voice recording
   stays on this machine. Nothing in the hand-off connects a service for her.
@@ -43,11 +45,11 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
   `Effects 2`, `Effects 3`, ... because clips on one track must not overlap), `Music` (when the
   story has `music`: at -30 dB like the render, repeated to the length of the reel, faded out over
   the end card; the fade is on its last piece).
-- `scene-01.html` ... `endcard.html`: one page per scene. Each is our own `engine/` and `data.js`
+- `scene-01.html` ... `endcard.html`: one page per scene. Each is the skill's own `engine/` and `data.js`
   with a thin wrapper: `frame(t)` draws the reel at (scene start + t). There is no second drawing
-  code, so the picture is the render's picture: the tests compare the page at `frame(0.5)` with our
-  page at the scene start + 0.5 s, and the two screenshots show the same picture. OpenFilm's own
-  `look` of the same time differs from our render by a mean of 0.1 of 255 per pixel (it re-encodes
+  code, so the picture is the render's picture: the tests compare the page at `frame(0.5)` with the
+  skill's page at the scene start + 0.5 s, and the two screenshots show the same picture. OpenFilm's own
+  `look` of the same time differs from the skill's render by a mean of 0.1 of 255 per pixel (it re-encodes
   the frame), nothing you can see.
 - `assets/` (sprites, photos, fonts, logo, music, `voice.wav`, `sfx/`), `engine/`, `data.js`,
   `style.css`, and `.paim-export.json` (the manifest of file hashes, see "A re-export").
@@ -76,7 +78,10 @@ Every change is written to `film.html` in `openfilm/` a moment after she makes i
 
 ## What to tell her, plainly
 
-- Our scene logic does not run on her edit. Studio applies a change after the page has drawn its
+- What she can and cannot change ("What P.AIM can change in Studio" above, "Not checked" below), that a
+  re-export never overwrites her edits ("A re-export"), and that a clip she changes by hand is exported
+  from Studio (last bullet below).
+- The skill's scene logic does not run on her edit. Studio applies a change after the page has drawn its
   frame, so a headline she retypes is not shrunk to fit and a picture she moves does not make the
   arrows or rings follow it. That follows from how OpenFilm applies changes (its SPEC); a long text
   and a marked picture were not tried. She should look at the result.
@@ -84,10 +89,10 @@ Every change is written to `film.html` in `openfilm/` a moment after she makes i
   its place (and sound clips starting after the cut moved up, the voice, running across it, did
   not), so the picture and her voice drift apart unless she cuts the voice at the same spot. Whether
   effect clips follow a reorder is not checked.
-- Studio mixes the clips as they stand. Our render's limiter and loudness measurement are not in
+- Studio mixes the clips as they stand. The render's limiter and loudness measurement are not in
   it: the final MP4 she exports from Studio is not the loudness-checked file the skill delivered.
   OpenFilm's `render --loudness=-14` exists (its help says so); it was not run on a reel.
-- Studio never changes `story.json`, `timing.json` or our MP4. Her edits live only in `openfilm/`,
+- Studio never changes `story.json`, `timing.json` or the skill's MP4. Her edits live only in `openfilm/`,
   so a clip she changes by hand is exported from Studio itself: `render.mjs` does not pick up her
   edits, and the MP4 the skill delivered stays as it was. Studio's own Export button is not checked
   (below): point her to it, but do not describe its steps.

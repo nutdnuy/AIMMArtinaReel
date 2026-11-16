@@ -22,6 +22,8 @@ l02: หุ้นหนึ่งตัว คือการเป็น เจ�
   phrases at a natural word break and run it again.
 - Thai does not use spaces between words, so the phrase spaces are yours to add: break where a
   speaker would breathe or stress, 4–12 characters per phrase reads best.
+- The repetition mark `ๆ` stays attached to its word (`แบบง่ายๆ`) and is never a phrase by itself:
+  written as `แบบง่าย ๆ` it becomes a caption of `ๆ` alone, gone in a third of a second.
 
 ## Shape of a reel
 
@@ -84,19 +86,23 @@ phrase). The project then moves through three files:
 | `script.proposed.md` | you | your corrected text, waiting for her confirmation |
 | `script.md` | you, after her answer | the script she supplied or confirmed; the only one the tools read |
 
-Write the proposal to `script.proposed.md`, never straight to `script.md`, and correct only:
+Write the proposal to `script.proposed.md`, never straight to `script.md`. It keeps the `lNN:` line
+format of `script.draft.md` and `script.md`; `timing.py` reads only those lines. Correct only:
 
-1. Spelling the recogniser got wrong (finance words, English terms such as `ETF`).
+1. Spelling the recogniser got wrong (finance words, English terms such as `ETF`). Keep the spoken
+   form she used when the draft shows it clearly (`นึง`, `ง่ายๆ`), not the written form.
 2. Phrase spaces: split every line into phrases of at most 14 base characters.
 3. Line breaks: join or split lines so each holds one idea, keeping the words in order. Lines
    need not match the draft's segments one to one.
-4. Numbers: spell them the way she read them.
+4. Numbers: digits in the draft are written as the words that were read aloud (`ห้าสิบ`, not `50`).
 
 Never change, add or remove what was said: the captions must match her voice, and
 `timing.py align` reports any line that drifts (`LOW lNN …`).
 
 The recogniser often mishears Thai ("บริสัตว์" for "บริษัท"). Fix a word only when the intended
-word is certain from context; otherwise write `[?]` in its place. Never fill a gap from
+word is certain from context; otherwise write `[?]` in its place. `script.proposed.md` holds only
+`[?]` for a word you cannot read, with no guess beside it; your best guesses go in your message to
+her, labelled as guesses, never in the file. Never fill a gap from
 `examples/` or from what the topic "should" say: those are not her words. Then stop and show
 P.AIM the whole proposal, line by line, and ask her to confirm or fix it. She is the only one
 who heard the recording. If you come back to a project that has `script.proposed.md` and no
@@ -104,6 +110,15 @@ who heard the recording. If you come back to a project that has `script.proposed
 
 After her answer, write `script.md` with her fixes and every `[?]` filled in. `timing.py`
 refuses a script that still holds `[?]` (exit 2, naming the lines).
+
+## A low ratio without a LOW line
+
+`timing.py align` prints `LOW` only for a line under 0.50, but its last line can still say
+`lowest lNN` under 0.75. For a lowest ratio under 0.75 with no `LOW` line, look at that line in
+`script.draft.md`, next to `script.md`. If the low ratio comes from recogniser noise (a numeral
+heard as digits, a garbled word she has already confirmed), keep her confirmed text and say in the
+delivery note that caption timing on that line could not be checked by ear. If the draft shows she
+said something else, treat it as a `LOW` line (step 5 of `SKILL.md`).
 
 ## The read-aloud sheet (topic mode)
 

@@ -148,7 +148,11 @@ Every frame is a function of time alone, so any frame renders the same in any or
   the safer option `green`.
 - Highlight the one phrase per line that carries the point.
 - Open with a hook scene (a `versus` suits a "this or that" topic); end on a takeaway scene.
-- Headlines are a few words (they shrink from 96 to 56 px to fit one 900 px line).
+- Headlines are a few words (they shrink from 96 to 56 px to fit one 900 px line). In voice mode the
+  captions are her words; headlines and labels may be your own words when they add no claim and no
+  figure. Every such headline is listed in the delivery note, so she can change it. A figure she spoke
+  without naming its source may be shown once a source is found (`script-style.md`, "Figures and
+  sources").
 
 ## Fixing a dead beat ("nothing new for more than 3 s")
 
