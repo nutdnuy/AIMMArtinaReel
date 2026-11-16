@@ -1,0 +1,14 @@
+{
+  "name": "paim-reel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Turns a finance topic or a voice recording into a 9:16 explainer video.",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@fontsource/ibm-plex-sans-thai": "^5.3.0",
+    "@phosphor-icons/core": "^2.1.1",
+    "playwright": "^1.65.0"
+  }
+}

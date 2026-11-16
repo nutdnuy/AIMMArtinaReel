@@ -1,0 +1,5 @@
+{
+  "name": "P.AIM", "handle": "", "logo": null, "disclaimer": "",
+  "colors": {"orange": "#F5820B", "green": "#14856D", "charcoal": "#252B31", "cream": "#FFFAF0"},
+  "fonts": {"family": "Sukhumvit Set", "fallback": "IBM Plex Sans Thai", "headlineWeight": 700, "bodyWeight": 400}
+}

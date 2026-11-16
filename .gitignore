@@ -1,0 +1,13 @@
+node_modules/
+.venv/
+__pycache__/
+*.mp4
+*.wav
+build/
+renders/
+frames/
+.DS_Store
+*.ttc
+*.ttf
+*.otf
+.superpowers/
