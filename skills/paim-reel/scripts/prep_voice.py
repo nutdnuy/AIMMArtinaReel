@@ -2,8 +2,8 @@
 
   prep_voice.py <audio> <project>
 
-Mono 48 kHz, head silence trimmed to a 0.25 s lead-in, pauses over 0.60 s shortened
-to 0.45 s (see the note in prep()), loudness -14 LUFS, true peak under -1 dBFS. Any audio or video container
+Mono 48 kHz, head silence trimmed to a 0.25 s lead-in, tail silence trimmed to at most
+0.15 s, pauses longer than 0.45 s shortened to 0.45 s (shorter ones are untouched), loudness -14 LUFS, true peak under -1 dBFS. Any audio or video container
 ffmpeg can read is accepted; only the first audio stream is used.
 """
 import subprocess
@@ -14,6 +14,7 @@ from pathlib import Path
 SAMPLE_RATE = 48000
 LEAD_IN = 0.25
 PAUSE_KEEP = 0.45
+TAIL_KEEP = 0.15
 SILENCE_DB = -45
 MIN_SPEECH = 1.0
 WARN_LONGER = 90.0
@@ -61,13 +62,15 @@ def prep(src: Path, project: Path) -> float:
     if not _has_audio(src):
         raise VoiceError(f"no audio stream in {src}")
 
-    # ffmpeg's silenceremove keeps stop_duration + stop_silence of a long pause, so the
-    # 0.45 s target is stop_duration itself. Side effect: pauses of 0.45-0.60 s are also
-    # clamped to 0.45 s; shorter ones are untouched.
+    # silenceremove keeps stop_duration + stop_silence of a long pause, so the 0.45 s
+    # target is stop_duration itself (stop_silence stays 0). The tail is trimmed by
+    # reversing, removing the now-leading silence down to TAIL_KEEP, and reversing back.
     trim = (f"aresample={SAMPLE_RATE},"
             f"silenceremove=start_periods=1:start_threshold={SILENCE_DB}dB,"
             f"silenceremove=stop_periods=-1:stop_duration={PAUSE_KEEP}"
-            f":stop_threshold={SILENCE_DB}dB:stop_silence=0")
+            f":stop_threshold={SILENCE_DB}dB:stop_silence=0,"
+            f"areverse,silenceremove=start_periods=1:start_threshold={SILENCE_DB}dB"
+            f":start_silence={TAIL_KEEP},areverse")
     finish = (f"loudnorm=I={TARGET_LUFS}:TP={TRUE_PEAK}:LRA=11,aresample={SAMPLE_RATE},"
               f"alimiter=limit={LIMIT:.4f}:level=disabled,adelay={round(LEAD_IN * 1000)}:all=1")
     out = project / "voice" / "voice.wav"

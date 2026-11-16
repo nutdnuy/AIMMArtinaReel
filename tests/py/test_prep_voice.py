@@ -65,9 +65,29 @@ def test_prep_peak_limits_spiky_audio(tmp_path):
     assert max_volume(tmp_path / "p/voice/voice.wav") <= -1.0
 
 
-def test_prep_keeps_short_pause(tmp_path):
-    src = build_audio(tmp_path / "short gap.m4a", 0.4, ["-c:a", "aac"])
-    assert prep(src, tmp_path / "p") >= 2.5     # 0.25 + 1 + 0.4 + 1
+@pytest.mark.parametrize("gap,lo,hi", [
+    (0.4, 2.60, 2.70),    # shorter than 0.45 s: untouched, 0.25 + 1 + 0.4 + 1
+    (0.45, 2.65, 2.75),   # exactly 0.45 s: untouched
+    (0.5, 2.68, 2.76),    # 0.45-0.60 s band: shortened to 0.45 s, 0.25 + 1 + 0.45 + 1
+    (2.0, 2.68, 2.76),    # long pause: shortened to 0.45 s
+])
+def test_prep_pause_rule(tmp_path, gap, lo, hi):
+    src = build_audio(tmp_path / "gap.wav", gap)
+    assert lo <= prep(src, tmp_path / "p") <= hi
+
+
+@pytest.mark.parametrize("tail", [0.0, 0.1, 0.3, 0.5, 1.5])
+def test_prep_trims_tail(tmp_path, tail):
+    # 1 s tone then `tail` s of silence: result is 0.25 lead-in + 1 s tone + at most 0.15 s of tail
+    fmt = "aformat=sample_rates=44100:channel_layouts=stereo"
+    graph = (f"sine=frequency=440:duration=1,{fmt}[a];"
+             f"anullsrc=r=44100:cl=stereo,atrim=duration={max(tail, 0.01)}[g];"
+             "[a][g]concat=n=2:v=0:a=1[out]")
+    src = tmp_path / "tail.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-filter_complex", graph, "-map", "[out]", str(src)],
+                   check=True)
+    d = prep(src, tmp_path / "p")
+    assert 1.20 <= d <= 1.25 + 0.15 + 0.02
 
 
 def test_prep_mov_with_video(tmp_path):
