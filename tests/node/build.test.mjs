@@ -1,0 +1,95 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
+import { StoryError } from '../../skills/paim-reel/lib/story.mjs';
+import { saveProfile } from '../../skills/paim-reel/lib/profile.mjs';
+import { copyFixture, tempDir, solidPng } from '../helpers.mjs';
+
+// Every test works on a fixture copy and an empty profile folder.
+function project(t) {
+  process.env.PAIM_CONFIG_DIR = tempDir(t, 'paim-config');
+  return copyFixture(t, 'mini');
+}
+
+const readStory = (dir) => JSON.parse(readFileSync(join(dir, 'story.json'), 'utf8'));
+const writeStory = (dir, story) => writeFileSync(join(dir, 'story.json'), JSON.stringify(story));
+
+test('mini builds into build/', async (t) => {
+  const dir = project(t);
+  const { resolved, buildDir } = await buildProject(dir);
+  assert.equal(resolved.duration, 5.0);
+  assert.equal(buildDir, join(dir, 'build'));
+  for (const f of ['index.html', 'style.css', 'data.js', 'resolved.json', 'engine/runtime.mjs',
+    'assets/ibm-plex-sans-thai-thai-400-normal.woff2', 'assets/ibm-plex-sans-thai-thai-700-normal.woff2']) {
+    assert.ok(existsSync(join(buildDir, f)), `${f} is missing`);
+  }
+  const data = readFileSync(join(buildDir, 'data.js'), 'utf8');
+  assert.match(data, /^window\.__PAIM_DATA = /);
+  assert.match(data, /<svg/);
+  assert.ok(data.includes('"buildings"') && data.includes('"basket"'), 'both icons are in data.js');
+  assert.ok(!data.includes('/Users/'), 'data.js holds no absolute home path');
+  assert.deepEqual(JSON.parse(readFileSync(join(buildDir, 'resolved.json'), 'utf8')), resolved);
+});
+
+test('an unknown icon is a StoryError', async (t) => {
+  const dir = project(t);
+  const story = readStory(dir);
+  story.scenes[0].items[0].icon = 'no-such-icon-xyz';
+  writeStory(dir, story);
+  await assert.rejects(buildProject(dir), StoryError);
+});
+
+test('a project without timing.json names timing.py', async (t) => {
+  const dir = project(t);
+  const { rmSync } = await import('node:fs');
+  rmSync(join(dir, 'timing.json'));
+  await assert.rejects(buildProject(dir), /timing\.py/);
+});
+
+test('a story.music file that does not exist is named', async (t) => {
+  const dir = project(t);
+  const story = readStory(dir);
+  story.music = 'audio/missing-bed.wav';
+  writeStory(dir, story);
+  await assert.rejects(buildProject(dir), /audio\/missing-bed\.wav/);
+});
+
+test('a sprite item builds when the sprite exists and names gen_sprites.py when not', async (t) => {
+  const dir = project(t);
+  const story = readStory(dir);
+  story.scenes[0].layout = 'center';
+  story.scenes[0].items = [{ id: 'b', type: 'sprite', sprite: 'basket', at: 'l01' }];
+  writeStory(dir, story);
+  await assert.rejects(buildProject(dir), (e) => e instanceof StoryError && /gen_sprites\.py/.test(e.message));
+  solidPng(join(dir, 'gen', 'sprites', 'basket.png'), '0000FF');
+  solidPng(join(dir, 'gen', 'sprites', 'basket-raw.png'), 'FF0000');
+  const { buildDir } = await buildProject(dir);
+  assert.ok(existsSync(join(buildDir, 'assets', 'sprites', 'basket.png')));
+  assert.ok(!existsSync(join(buildDir, 'assets', 'sprites', 'basket-raw.png')));
+});
+
+test('the profile handle reaches the end card', async (t) => {
+  const dir = project(t);
+  saveProfile({ handle: '@test' });
+  const { resolved } = await buildProject(dir);
+  assert.equal(resolved.endCard.handle, '@test');
+});
+
+test('the logo is copied into build/assets and the end card points at it', async (t) => {
+  const dir = project(t);
+  const logo = join(tempDir(t, 'paim-logo'), 'my logo.png');
+  solidPng(logo, '14856D', 64);
+  saveProfile({ logo });
+  const { resolved, buildDir } = await buildProject(dir);
+  assert.equal(resolved.endCard.logo, 'assets/logo.png');
+  assert.ok(existsSync(join(buildDir, 'assets', 'logo.png')));
+  assert.ok(!readFileSync(join(buildDir, 'data.js'), 'utf8').includes(logo));
+});
+
+test('a logo path that does not exist is named', async (t) => {
+  const dir = project(t);
+  saveProfile({ logo: join(dir, 'nope', 'gone.png') });
+  await assert.rejects(buildProject(dir), /nope\/gone\.png/);
+});
