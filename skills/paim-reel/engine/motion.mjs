@@ -3,7 +3,7 @@
 
 export const ENTER_DUR = 0.40;
 export const EXIT_DUR = 0.20;
-const NUMBER_DUR = 0.8;
+export const NUMBER_DUR = 0.8;
 const BAR_DUR = 0.6;
 const OPAQUE_AT = 0.4; // entrance progress at which opacity reaches 1
 const SNAP = 1e-9; // frame times like k/30 carry float noise; snap it at the ends

@@ -1,0 +1,24 @@
+{
+  "slug": "thai-marks",
+  "title": "Thai tone marks and stacked vowels",
+  "highlight": ["l02@1"],
+  "scenes": [
+    {
+      "id": "s1",
+      "from": "l01",
+      "layout": "center",
+      "headline": {"text": "น้ำ ปั๊ม กี่ปี"},
+      "items": [
+        {"id": "holder", "type": "icon", "icon": "buildings", "color": "orange", "label": "ผู้ถือหุ้นกู้", "at": "l01"}
+      ]
+    },
+    {
+      "id": "s2",
+      "from": "l02",
+      "layout": "center",
+      "items": [
+        {"id": "bond", "type": "icon", "icon": "basket", "color": "green", "label": "ผู้ถือหุ้นกู้", "at": "l02"}
+      ]
+    }
+  ]
+}
