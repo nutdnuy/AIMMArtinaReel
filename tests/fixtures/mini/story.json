@@ -1,0 +1,16 @@
+{
+  "slug": "mini",
+  "title": "Stock vs ETF",
+  "highlight": ["l02@2"],
+  "scenes": [
+    {
+      "id": "s1",
+      "from": "l01",
+      "layout": "versus",
+      "items": [
+        {"id": "stock", "type": "icon", "icon": "buildings", "color": "orange", "label": "หุ้น", "at": "l01"},
+        {"id": "etf", "type": "icon", "icon": "basket", "color": "green", "label": "ETF", "at": "l02"}
+      ]
+    }
+  ]
+}
