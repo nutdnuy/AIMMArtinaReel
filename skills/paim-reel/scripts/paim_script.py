@@ -1,7 +1,7 @@
 """Parse script.md into spoken lines and measure caption tokens."""
 import re
 
-LINE_RE = re.compile(r"^(l\d{2,}):\s*(.+)$")
+LINE_RE = re.compile(r"^(l\d{2,}):\s*(.*)$")
 
 
 class ScriptError(ValueError):

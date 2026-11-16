@@ -31,3 +31,9 @@ def test_base_len():
 def test_long_tokens():
     assert long_tokens(parse_script("l01: " + "ก" * 15 + " ข")) == [("l01", "ก" * 15)]
     assert long_tokens(parse_script("l01: " + "ก" * 14 + " ข")) == []
+
+
+@pytest.mark.parametrize("src", ["l01:", "l01: ก\nl02:   \nl03: ข"])
+def test_empty_spoken_line_raises(src):
+    with pytest.raises(ScriptError):
+        parse_script(src)
