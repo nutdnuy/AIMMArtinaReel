@@ -2,6 +2,9 @@
 
   timing.py estimate <project>   script.md              -> timing.json
   timing.py align    <project>   script.md + voice/words.json -> timing.json
+
+On success prints one line: "estimated 30.9 s, 12 lines" or
+"aligned 65.7 s, match 0.86, lowest l07 0.75" (after any "LOW lNN ..." lines).
 """
 import difflib
 import json
@@ -168,6 +171,12 @@ def main(argv) -> int:
 
     (project / "timing.json").write_text(
         json.dumps(timing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if mode == "estimate":
+        print(f"estimated {timing['duration']:.1f} s, {len(timing['lines'])} lines")
+    else:
+        low = min(timing["lines"], key=lambda line: line["ratio"])
+        print(f"aligned {timing['duration']:.1f} s, match {timing['match']:.2f}, "
+              f"lowest {low['id']} {low['ratio']:.2f}")
     return 0
 
 

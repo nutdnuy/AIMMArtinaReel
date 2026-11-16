@@ -240,6 +240,8 @@ export function validateStory(story, timing, brand, assets = { sprites: [] }) {
           if (!Number.isInteger(extra.decimals) || extra.decimals < 0 || extra.decimals > 6) {
             add(where, 'decimals must be an integer from 0 to 6');
           }
+          extra.group = it.group === undefined ? true : it.group;
+          if (typeof extra.group !== 'boolean') add(where, 'group must be true or false (thousands separators)');
           extra.prefix = it.prefix ?? '';
           extra.suffix = it.suffix ?? '';
           if (typeof extra.prefix !== 'string' || typeof extra.suffix !== 'string') {

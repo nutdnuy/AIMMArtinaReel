@@ -25,15 +25,17 @@ l02: หุ้นหนึ่งตัว คือการเป็น เจ�
 
 ## Shape of a reel
 
-- 8–14 lines for 30–60 s. `timing.py estimate` reads 0.08 s per base character, 0.30 s between
-  lines and 0.25 s at each end; aim the estimate at the length asked for.
+- 8–14 lines. `timing.py estimate` reads 0.08 s per base character, 0.30 s between lines and
+  0.25 s at each end, and prints `estimated 34.0 s, 12 lines`. The estimate is a floor: real
+  speech usually runs longer, so aim for an estimate of 30–50 s.
 - **Hook in the first line**: a question or a surprise the viewer wants answered.
 - **One idea per line.** If a line needs "and" to hold two ideas, make it two lines.
 - End on a takeaway line: what to remember, not what to buy.
 - Write for the profile's `audience` in its `tone` (`scripts/profile.mjs get audience`,
-  `… get tone`). Plain spoken Thai; explain any finance word the first time it appears.
-- Spell numbers the way they are read (`ห้าสิบตัว`, `สามเปอร์เซ็นต์`, `เซ็ตห้าสิบ`), not as
-  digits. P.AIM then reads exactly what is written and the alignment matches her voice. The
+  `… get tone`). An empty `audience` means beginners; an empty `tone` means friendly, plain
+  speech. Plain spoken Thai; explain any finance word the first time it appears.
+- Spell numbers the way they are read (`ห้าสิบตัว`, `สามเปอร์เซ็นต์`, `หนึ่งพันห้าสิบบาท`), not
+  as digits. P.AIM then reads exactly what is written and the alignment matches her voice. The
   figure itself goes on screen as a `number` item with its `source`.
 
 ## Content rules
@@ -44,11 +46,27 @@ Educational finance content only:
 - No individual investment advice: no "buy X", no telling a viewer what suits them personally.
   Compare options by who they tend to suit, in general terms.
 - Every figure shown on screen is fact-checked on the web and carries a `source` in
-  `story.json` (publisher, page, URL, access date). Prefer stable, definitional figures (how many
-  stocks an index holds) over returns or prices, which go stale. A figure you cannot verify
-  stays out of the script and off the screen; say so in the delivery report.
+  `story.json`, in both modes (in voice mode, check the figures P.AIM says). See "Figures and
+  sources" below. A figure you cannot verify stays off the screen; say so in the delivery
+  report.
 - No company names, logos or brand marks unless P.AIM's own script or recording uses them; never
   in sprites.
+
+## Figures and sources
+
+- `source` names the publisher, the page, the URL and the access date:
+  `"<publisher>, <page>: <what it says>. <url> (accessed YYYY-MM-DD)"`.
+- Where to look, in order: a Thai regulator or exchange (the SEC Thailand, the Bank of Thailand,
+  the Stock Exchange of Thailand), then another country's regulator, then a named reference work.
+  Prefer stable, definitional figures (how many stocks an index holds) over returns or prices,
+  which go stale.
+- A figure you computed from sourced inputs may go on screen with
+  `source: "computed: 1000 × 1.05, inputs from <source>"`.
+- A made-up illustration (an example deposit, an example price) is allowed only when the spoken
+  line calls it hypothetical (`สมมติ…`) and its `source` says `hypothetical example`. Changing
+  the currency of a source's worked example is allowed only for such a labelled illustration.
+- Shown numbers get thousands separators (`1,050`) unless the item sets `"group": false` (a
+  year, for example).
 
 ## Voice mode: turning `script.draft.md` into `script.md`
 
@@ -61,8 +79,15 @@ phrase). Copy it to `script.md` and correct only:
 3. Line breaks: join or split lines so each holds one idea, keeping the words in order.
 
 Never change, add or remove what was said: the captions must match her voice, and
-`timing.py align` reports any line that drifts (`LOW lNN …`). Numbers stay the way she said
-them.
+`timing.py align` reports any line that drifts (`LOW lNN …`). Spell numbers the way she read
+them. Lines need not match the draft's segments one to one.
+
+The recogniser often mishears Thai ("บริสัตว์" for "บริษัท"). Fix a word only when the intended
+word is certain from context; otherwise write `[?]` in its place. Never fill a gap from
+`examples/` or from what the topic "should" say: those are not her words. Then stop and show
+P.AIM the whole corrected script, line by line, and ask her to confirm or fix it. She is the
+only one who heard the recording. Run `timing.py align` only after she answers and no `[?]`
+remains.
 
 ## The read-aloud sheet (topic mode)
 

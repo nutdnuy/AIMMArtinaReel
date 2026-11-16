@@ -131,3 +131,29 @@ def test_cli_long_token_exit_2(tmp_path):
     assert r.returncode == 2
     assert "l01" in r.stderr + r.stdout
     assert not (tmp_path / "timing.json").exists()
+
+
+def test_cli_estimate_prints_one_success_line(tmp_path):
+    make_project(tmp_path, "l01: กขค งจ\nl02: ฉช\n")
+    r = run_cli("estimate", tmp_path)
+    assert r.returncode == 0, r.stderr
+    t = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
+    assert r.stdout == f"estimated {t['duration']:.1f} s, 2 lines\n"
+
+
+def test_cli_align_prints_one_success_line_with_the_lowest_line(tmp_path):
+    make_project(tmp_path, "l01: ETF กับหุ้น ต่างกันยังไง\nl02: กขค งจ\n", words=W, duration=4.3)
+    r = run_cli("align", tmp_path)
+    assert r.returncode == 0, r.stderr
+    t = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
+    low = min(t["lines"], key=lambda line: line["ratio"])
+    assert r.stdout == f"aligned 4.3 s, match {t['match']:.2f}, lowest {low['id']} {low['ratio']:.2f}\n"
+
+
+def test_cli_align_success_line_follows_the_low_lines(tmp_path):
+    make_project(tmp_path, "l01: ETF กับหุ้น ต่างกันยังไง\nl02: กขค งจ\n", words=W[:5], duration=4.3)
+    r = run_cli("align", tmp_path)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    assert lines[0].startswith("LOW l02 ")
+    assert lines[-1].startswith("aligned 4.3 s, match ") and lines[-1].endswith(" lowest l02 " + lines[0].split()[2])

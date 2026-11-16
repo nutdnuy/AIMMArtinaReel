@@ -4,7 +4,8 @@
 export const ENTER_DUR = 0.40;
 export const EXIT_DUR = 0.20;
 export const NUMBER_DUR = 0.8;
-const BAR_DUR = 0.6;
+export const BAR_DUR = 0.6;
+export const MARK_DUR = 0.3; // a mark draws on over this long
 const OPAQUE_AT = 0.4; // entrance progress at which opacity reaches 1
 const SNAP = 1e-9; // frame times like k/30 carry float noise; snap it at the ends
 
@@ -94,12 +95,17 @@ export function itemState(item, t) {
   };
 }
 
-// The number shown at time t: counts from `from` to `to` over 0.8 s starting at item.t.
+// Thousands separators in the integer part of a fixed-point string: "-1234.50" -> "-1,234.50".
+const grouped = (text) => text.replace(/^(-?)(\d+)/, (_, sign, digits) => sign + digits.replace(/\B(?=(\d{3})+$)/g, ','));
+
+// The number shown at time t: counts from `from` to `to` over 0.8 s starting at item.t, with
+// thousands separators unless item.group is false.
 export function numberAt(item, t) {
   const from = item.from ?? 0;
   const value = from + (item.to - from) * easeOutCubic(progress(t, item.t, NUMBER_DUR));
   let text = value.toFixed(item.decimals ?? 0);
   if (/^-0(\.0+)?$/.test(text)) text = text.slice(1);
+  if (item.group !== false) text = grouped(text);
   return `${item.prefix ?? ''}${text}${item.suffix ?? ''}`;
 }
 

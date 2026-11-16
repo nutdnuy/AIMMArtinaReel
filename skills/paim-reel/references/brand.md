@@ -44,8 +44,8 @@ Every text element uses `"Sukhumvit Set", "IBM Plex Sans Thai", sans-serif`, lin
 | headline | 96 px / 700 | orange pill, charcoal text, centred in HEADLINE; shrinks to 56 px to fit |
 | caption | 84 px / 700 | one phrase at a time, centred in CAPTION; shrinks to 52 px; a highlighted phrase sits on an orange pill and grows 0.92 → 1 over 0.12 s |
 | item label | 52 px / 700 | under the picture, in the scene's text colour; not shrunk, so keep labels short |
-| pill item | 64 px / 700 | shrinks to 32 px to fit its slot |
-| number item | 140 px / 700 | counts up over 0.8 s; shrinks to 56 px to fit |
+| pill item | 64 px / 700 | one line; shrinks to 32 px to fit its slot, else `clipped` |
+| number item | 140 px / 700 | one line, thousands separators; counts up over 0.8 s; shrinks to 56 px to fit, else `clipped` |
 | end card "ติดตาม" | 120 px / 700 | cream on green |
 | end-card handle, disclaimer | 40 px / 400 | shown when the profile sets them |
 | draft banner | 40 px / 700 | `DRAFT · ยังไม่มีเสียง`, on every frame of an estimated-timing render |

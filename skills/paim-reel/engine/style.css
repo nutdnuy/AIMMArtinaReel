@@ -121,6 +121,9 @@ html, body {
 .item.side { flex-direction: row; gap: 24px; }
 .item.side .art { flex: none; width: auto; height: 100%; aspect-ratio: 1; }
 .item.side .label { flex: 0 1 auto; min-width: 0; text-align: left; }
+/* Pills and number chips stay on one line (a Thai phrase must not break inside a word): they shrink to
+   fit, and one that does not fit at its minimum size reports clipped. */
+.pill, .number { white-space: nowrap; }
 /* A pill or number chip does not stretch its art area, so it sits right above its label, the pair centred
    in the slot; a chip taller than the slot still shrinks the art area below it and reads as unfit. */
 .pill-item .art, .number-item .art { flex: 0 1 auto; }

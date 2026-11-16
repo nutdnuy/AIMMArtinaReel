@@ -9,151 +9,158 @@ Turn a finance topic, or P.AIM's recorded voice, into a 1080×1920 explainer ree
 brand: a few large stickers that pop and regroup on a faint grid, one bold caption phrase at a
 time, a green end card.
 
-`<skill>` below is this skill's folder; run every script by its path. Python scripts run with
-`<skill>/.venv/bin/python`, Node scripts with `node`. `<project>` is the reel's folder. Every
-script writes only into `<project>`.
+`<skill>` is this skill's folder; run every script by its path (Python with
+`<skill>/.venv/bin/python`, Node with `node`). `<project>` is the reel's folder. Scripts never
+write into the skill folder (`image_cli.py test` writes under the user's config folder).
 
-Read before you start: `references/script-style.md` (writing the script),
-`references/story-json.md` (writing the story, fixing `check.mjs` findings),
-`references/brand.md` (colours, type, zones, what never goes on screen).
+Read: `references/script-style.md` (script, facts, read-aloud sheet), `references/story-json.md`
+(story, `check.mjs` findings, dead beats), `references/brand.md` (colours, type, zones, never on
+screen). The bundled `examples/` show the format only: they are never a source for what P.AIM
+said or for facts.
 
 ## 0. Check the machine
 
-Run `<skill>/scripts/doctor.sh --agent claude` under Claude Code, or `--agent codex` under Codex.
+`<skill>/scripts/doctor.sh --agent claude` under Claude Code, `--agent codex` under Codex.
 
-- Exit 0: go on. Note the `font:` line for the delivery report.
-- A `MISSING …` line: stop, tell P.AIM what is missing and the line that fixes it, and wait.
-  `node` → install Node 20 or newer; `ffmpeg`/`ffprobe` → `brew install ffmpeg`;
-  `playwright` or `python packages` → run the repository's `install.sh`
-  (`<skill>/../../install.sh`); `chromium` → `npx playwright install chromium` in `<skill>`;
-  `image-cli` → re-run setup (the image CLI must be chosen and on `PATH`).
+- Exit 0: go on. Note the `font:` line for the delivery note.
+- `MISSING …`: stop, tell P.AIM what is missing and how it is fixed, and wait. `node` → Node 20
+  or newer; `ffmpeg`/`ffprobe` → `brew install ffmpeg`; `playwright` or `python packages` → the
+  repository's `install.sh` (`<skill>/../../install.sh`); `chromium` → `npx playwright install
+  chromium` in `<skill>`; `image-cli` → re-run setup.
 - `onboarding: needed`: stop and tell P.AIM that setup has not been finished yet.
 
-## 1. Make the project folder
+## 1. Project folder and slug
 
-`<skill>/scripts/profile.mjs get projects_dir` (run with `node`) names where reels are kept; if
-it is empty, use the folder beside the audio file, or the working directory. Create
-`<project>` = that folder + `/<slug>` (lower-case letters, digits and `-`, from the topic).
-Never put a project inside `<skill>`. Copy the audio file into `<project>` when there is one.
+Parent: `node <skill>/scripts/profile.mjs get projects_dir`; if empty, the folder beside the
+audio file, or the working directory; never inside `<skill>`. Folder name: lower-case ASCII,
+digits and `-`; translate a Thai topic to two or three English words (`compound-interest`). In
+voice mode with no topic yet use `reel-YYYYMMDD`, and pick `story.slug` once the transcript shows
+the topic. The slug names the output files; it need not equal the folder name. Copy the audio
+file into `<project>`.
+
+Profile values: `get audience` empty → write for beginners; `get tone` empty → friendly, plain
+speech. Empty `handle` / `disclaimer` → the end card shows neither (say so when delivering).
 
 ## 2. Route
 
-An audio or video file was given → voice mode (step 4). Otherwise → topic mode (step 3). A
-project that already has `script.md` and `story.json` from an earlier draft, plus a new
-recording → voice mode, keeping both files.
+Audio or video file given → voice mode (step 4). Otherwise → topic mode (step 3). A project with
+a draft's `script.md` and `story.json` plus a new recording → voice mode, keeping both files.
 
-## 3. Topic mode
+## 3. Topic mode, in this order
 
-1. Write `<project>/brief.md`: the topic, the one thing the viewer should remember, the target
-   length (30–60 s), and the audience and tone from `profile.mjs get audience` / `get tone`.
-2. Write `<project>/script.md` following `references/script-style.md`.
-3. Fact-check every figure on the web. Keep only figures you verified; note each source (URL and
-   access date) for the story. Drop any claim you cannot verify.
-4. `<skill>/.venv/bin/python <skill>/scripts/timing.py estimate <project>` → `timing.json`.
-   Exit 2 `tokens over 14 characters, add spaces to split them:` lists the long phrases: split
-   them in `script.md` and run it again. Exit 1 `missing …/script.md`: the path is wrong.
-5. Sprites and story: step 6. Build and check: step 7.
-6. `node <skill>/scripts/render.mjs <project> --preview` → `renders/<slug>-draft.mp4` and
-   `renders/<slug>-draft-preview.mp4` (silent, stamped DRAFT).
-7. Write `<project>/read-aloud.md` (format in `references/script-style.md`).
-8. Deliver the draft preview and the read-aloud sheet. Say plainly that the timing is estimated
-   and the voice is still needed: ask P.AIM to record the sheet and send the file. Stop here.
-   When the recording arrives, continue at step 4 in the same `<project>`.
+1. `<project>/brief.md`: topic, the one thing to remember, target length, audience, tone.
+2. `<project>/script.md` (`references/script-style.md`). Fact-check every figure on the web
+   (rules in that file); keep only what you verified.
+3. `<skill>/.venv/bin/python <skill>/scripts/timing.py estimate <project>` → prints
+   `estimated 34.0 s, 12 lines`. Aim for 30–50 s: the estimate is a floor, real speech runs
+   longer. Exit 2 `tokens over 14 characters, add spaces to split them:` → split those phrases
+   and run it again.
+4. Sprites and story (step 6), then build, check and stills (step 7), then render (step 8).
+5. `<project>/read-aloud.md` (format in `references/script-style.md`).
+6. Hand over the draft MP4, its preview and the read-aloud sheet. Say plainly that the timing is
+   estimated and her voice is still needed; ask her to record the sheet and send the file.
+   **Stop.** When the recording arrives, continue at step 4 in the same `<project>`.
 
 ## 4. Voice mode
 
 1. `<skill>/.venv/bin/python <skill>/scripts/prep_voice.py <audio> <project>` →
-   `voice/voice.wav` (mono 48 kHz, 0.25 s lead-in, pauses over 0.45 s cut to 0.45 s, end trimmed
-   to 0.15 s, −14 LUFS). Prints `voice N s -> …`. `WARN longer than 90 s`: tell P.AIM the reel
-   will be long and ask whether to go on. Exit 2 prints why (`no audio stream in …`, `no speech
-   found in …`, `ffmpeg failed to …`): tell her and ask for another file.
-2. `<skill>/.venv/bin/python <skill>/scripts/transcribe.py <project>` → `voice/words.json`, all
-   on this machine (the first run downloads a speech model of about 3 GB; tell her it can take
-   several minutes). Prints `N words, M segments, D s`. Exit 2 `no speech recognised in the
-   recording`: ask for another take. Exit 1 `missing …voice.wav`: run step 4.1 first.
-3. No `script.md` yet: `transcribe.py` also wrote `script.draft.md`, whose lines have **no
-   spaces between phrases**. Copy it to `script.md` and correct spelling, add the phrase spaces
-   (every phrase 14 base characters or fewer) and split lines into one idea each, never changing
-   what was said (`references/script-style.md`, "Voice mode").
-4. `<skill>/.venv/bin/python <skill>/scripts/timing.py align <project>` → `timing.json` timed to
-   her voice. Exit 2 with `tokens over 14 characters` → split those phrases and run it again.
+   `voice/voice.wav` (mono 48 kHz, 0.25 s lead-in, pauses over 0.45 s cut to 0.45 s, end
+   trimmed to 0.15 s, −14 LUFS); prints `voice N s -> …`. `WARN longer than 90 s`: ask whether
+   to go on. Exit 2 prints why (`no audio stream`, `no speech found`, `ffmpeg failed to …`):
+   tell her and ask for another file.
+2. `<skill>/.venv/bin/python <skill>/scripts/transcribe.py <project>` → `voice/words.json`, on
+   this machine (the first run downloads a 3 GB speech model: say it takes minutes). Prints
+   `N words, M segments, D s`. Exit 2 `no speech recognised`: ask for another take. Exit 1
+   `missing …voice.wav`: run 4.1 first.
+3. **If `script.md` already exists** (she read from the sheet): go to 4.4.
+   **If there is no `script.md`**, `transcribe.py` wrote `script.draft.md`, with no spaces
+   between phrases and often misheard Thai. Copy it to `script.md` and correct spelling, add
+   phrase spaces (≤ 14 base characters each), spell numbers the way they are read, and split
+   lines into one idea each. Lines need not match the draft's segments one to one. Never guess
+   a word you cannot read: mark it `[?]` instead.
+   **Then STOP.** You cannot hear the recording. Show P.AIM the corrected `script.md`, line by
+   line, and ask her to confirm it or fix any line. Do not run `timing.py align`, draw sprites
+   or write a story until she answers. Apply her fixes; no `[?]` may remain.
+4. `<skill>/.venv/bin/python <skill>/scripts/timing.py align <project>` → `timing.json`;
+   prints `aligned 65.7 s, match 0.86, lowest l07 0.75`. Exit 2 `tokens over 14 characters` →
+   split those phrases and run it again. A lowest ratio under 0.75 deserves a second look at that
+   line's wording even on exit 0. Then fact-check every figure she says that will go on screen
+   (same rules as topic mode) and continue at step 6.
 
 ## 5. When the script and the voice disagree
 
 `align` prints `LOW lNN <ratio> <text>` for a line the voice does not match, and exits 2 with
-`script and voice do not match (match … < 0.60)` when most of it differs. Either way: do not
-render. Show P.AIM those lines and ask whether to change `script.md` to what she said, or to
-record again. Then run `timing.py align` again.
+`script and voice do not match (match … < 0.60)` when most of it differs. Do not render. Show
+P.AIM those lines; ask whether to change `script.md` to what she said or to record again. Then
+run `timing.py align` again.
 
 ## 6. Sprites, then the story
 
-Read `references/story-json.md`.
-
-1. List the objects the script names in `<project>/sprites.tsv`, one `name<TAB>subject` line
-   each: a generic object in plain words ("a shopping basket full of coins"), never a brand,
-   logo, text or real person. 4–8 sprites per reel; reuse one sprite in several scenes.
+1. `<project>/sprites.tsv`, one `name<TAB>subject` line per object the script names: a generic
+   object in plain words, never a brand, logo, text or real person. 4–8 per reel; reuse one in
+   several scenes.
 2. `<skill>/.venv/bin/python <skill>/scripts/gen_sprites.py <project> --agent claude` (or
-   `--agent codex`) → `gen/sprites/<name>.png`. One line per sprite: `OK`, `SKIP` (already
-   drawn), `FAIL <name> (<log>)`, `OFF-PALETTE <name> <share>`, `QUOTA …`.
-   - Exit 0: every sprite is drawn. Exit 1: some `FAIL`; read the end of each log, then run again
-     with `--only <name>` (drawn sprites are skipped).
-   - Exit 2 `No image CLI is chosen yet` or `The image command … is not installed`: re-run setup.
-     If sprites keep failing, run `<skill>/.venv/bin/python <skill>/scripts/image_cli.py test`
-     (same `--agent`); exit 2 prints one sentence saying why the tool cannot draw: tell P.AIM that
-     sentence and re-run setup.
-   - Exit 3 `QUOTA`: stop. Tell P.AIM the drawing service's quota is used up and to try again
-     later. Use `icon` items instead only if she says so.
-3. Look at every `gen/sprites/<name>.png` (open the image). Delete and redraw one
-   (`rm gen/sprites/<name>.png`, then `--only <name>`) that has text, a logo, a wrong colour,
-   more than one object, or an `OFF-PALETTE` line. Redraw each sprite at most twice.
-4. Write `<project>/story.json`: one scene per idea; the sprite is the thing the line names; bring
-   each item in on the phrase that names it; something new at least every 3 s; orange for the
-   subject of each line, green for growth or the safer option; highlight the one phrase per line
-   that carries the point; every `number` has a `source`; end on a takeaway scene.
+   `codex`: the agent running this skill, not the drawing tool). Writes `gen/sprites/<name>.png`
+   (the story uses this), plus `<name>-raw.png` and `<name>.log`. One line per sprite: `OK`,
+   `SKIP` (already drawn), `FAIL <name> (<log>)`, `OFF-PALETTE <name> <share>`, `QUOTA …`.
+   - Exit 0: all drawn. Exit 1: on each `FAIL`, read the last lines of that log before deciding
+     what went wrong; then run again with `--only <name>` (drawn sprites are skipped).
+   - Exit 2: a bad `sprites.tsv` line (the message names it: fix it), or `No image CLI is chosen
+     yet` / `The image command … is not installed`: re-run setup. If drawing keeps failing, run
+     `<skill>/.venv/bin/python <skill>/scripts/image_cli.py test` (same `--agent`); its exit 2
+     sentence says why the tool cannot draw: tell P.AIM that sentence and re-run setup.
+   - Exit 3 `QUOTA`: stop; the drawing quota is used up, try later. Use `icon` items instead only
+     if P.AIM says so.
+3. Open every `gen/sprites/<name>.png`. Redraw (`rm` it, then `--only <name>`; at most twice) one
+   with text, a logo, a wrong colour, more than one object, or an `OFF-PALETTE` line.
+4. `<project>/story.json` (`references/story-json.md`): one scene per idea; the sprite is the
+   thing the line names, entering on the phrase that names it; something new at least every 3 s;
+   orange for the subject of each line, green for growth or the safer option; one highlighted
+   phrase per line; every `number` has a `source`; end on a takeaway scene.
 
 ## 7. Build, check, look
 
-1. `node <skill>/scripts/build.mjs <project>` → `build/`. Prints `built <slug> (<duration> s)`.
-   Exit 2 lists every story problem, one per line: fix them all and build again.
-2. `node <skill>/scripts/check.mjs <project>`. Exit 0 when the `text:`, `dead beats:` and
-   `overlap:` lines all say `PASS`. Exit 1: fix each finding (table in
-   `references/story-json.md`) and run it again until all three pass. Never render on a FAIL.
-3. `node <skill>/scripts/still.mjs <project> <t1,t2,…> <project>/sheet.png` with the middle of
-   every scene (`(t0 + t1) / 2` of each scene in `build/resolved.json`). Look at the sheet: fix
-   a picture covered by a mark or a caption, a crowded or empty scene, a label that wraps badly.
-   Build, check and look again after a change.
+1. `node <skill>/scripts/build.mjs <project>` prints `built <slug> (<duration> s)`. Exit 2 lists
+   every story problem, one per line: fix them all and build again.
+2. `node <skill>/scripts/check.mjs <project>`: exit 0 when `text:`, `dead beats:` and `overlap:`
+   all say `PASS`. Exit 1: fix each finding (`references/story-json.md`) and run it again. Never
+   render on a FAIL.
+3. `node <skill>/scripts/still.mjs <project> --scenes <project>/sheet.png`: one frame per scene,
+   once everything in it has settled. Open the sheet and fix a covered, crowded or empty scene or
+   a badly wrapped label; then build, check and look again. A still taken at any other time can
+   catch a counter mid-count or miss late items.
 
 ## 8. Render
 
-`node <skill>/scripts/render.mjs <project> --preview`. Prints `N frames -> <file>` and
-`preview -> <file>`. Voice mode writes `renders/<slug>.mp4` and `renders/<slug>-preview.mp4`;
-estimated timing writes the `-draft` pair. Exit 2: a build problem, fix it; exit 1: read the
-ffmpeg message.
-
-Confirm the file:
-`ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate -of compact renders/<slug>.mp4`
-must show a video stream `h264`, `1080`×`1920`, `30/1` and, for a final, an audio stream `aac`
-at `48000`. A final with no audio stream means `voice/voice.wav` is missing: run step 4.1, then
-render again. Never deliver a silent file as a final.
+`node <skill>/scripts/render.mjs <project> --preview` prints `N frames -> <file>` and
+`preview -> <file>`: `renders/<slug>.mp4` and `-preview.mp4`, or the `-draft` pair on estimated
+timing. Exit 2: a build problem; exit 1: read the ffmpeg message. Check the file with
+`ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate -of compact <file>`:
+video `h264`, `1080`×`1920`, `30/1`. A draft has no audio stream, which is correct. A final must
+also have audio `aac` at `48000`; if not, `voice/voice.wav` is missing: run step 4.1 and render
+again. Never deliver a silent file as a final.
 
 ## 9. Deliver
 
-Send P.AIM the MP4 and its preview, and report:
+Send the MP4 and its preview (topic mode: also the read-aloud sheet) and report:
 
 - the font that drew the text (`font:` from `check.mjs`; IBM Plex Sans Thai means Sukhumvit Set
   is not on this machine);
-- which image CLI drew the sprites (`codex`, `gemini` or the profile's `image_cmd`);
-- what was checked: `check.mjs` all PASS, the contact sheet looked at, `ffprobe` results, and
-  every on-screen figure with its source;
-- any claim left off screen because it could not be verified;
+- what drew the sprites: `codex` or `gemini`, or "custom command" when `PAIM_IMAGE_CMD` or the
+  profile's `image_cmd` is set;
+- what was checked: `check.mjs` all PASS, the `--scenes` sheet looked at, `ffprobe`, and every
+  on-screen figure with its source;
+- any claim left off screen because it could not be verified; any empty profile value (no
+  handle or disclaimer on the end card);
 - that you cannot listen to the mix, so she should play it once before posting.
 
 ## Never
 
 - Logos, brand marks or real people anywhere, sprites included.
-- A number on screen without a verified source.
+- A number on screen without a source, or a made-up figure not called hypothetical.
+- Guessing words the recogniser could not read, or taking them from `examples/`.
 - Text-to-speech, a cloned voice, or any voice but P.AIM's own recording.
 - Writing into the skill folder.
-- Sending the recording or the script to any service. Only the short sprite descriptions go to
-  the image CLI.
+- Sending the recording or the script to any service; only the short sprite descriptions go to
+  the image tool.
 - Typing a password, API key or login code for the user, or storing one. She signs in herself.

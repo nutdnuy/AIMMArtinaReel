@@ -100,6 +100,18 @@ test('numberAt', () => {
   assert.equal(numberAt({ ...n, prefix: '฿', suffix: '', decimals: 0, to: 120 }, 9), '฿120');
 });
 
+test('numberAt groups thousands by default, and not when group is false', () => {
+  const n = { t: 0, from: 0, to: 1050, decimals: 0, prefix: '', suffix: '' };
+  assert.equal(numberAt(n, 9), '1,050');
+  assert.equal(numberAt({ ...n, to: 1102.5, decimals: 2, prefix: '฿' }, 9), '฿1,102.50');
+  assert.equal(numberAt({ ...n, to: 1234567 }, 9), '1,234,567');
+  assert.equal(numberAt({ ...n, to: 999 }, 9), '999');
+  assert.equal(numberAt({ ...n, from: -2500, to: -2500 }, 9), '-2,500');
+  assert.equal(numberAt({ ...n, group: true }, 9), '1,050');
+  assert.equal(numberAt({ ...n, group: false }, 9), '1050');
+  assert.equal(numberAt({ ...n, to: 2026, group: false }, 9), '2026');
+});
+
 test('numberAt never shows a negative zero', () => {
   const n = { t: 0, from: -0.01, to: 0, decimals: 1, prefix: '', suffix: '' };
   assert.equal(numberAt(n, 0), '0.0');

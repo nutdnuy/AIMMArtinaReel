@@ -146,6 +146,37 @@ test('a pill that cannot fit its box is clipped', SLOW, async (t) => {
   assert.ok(c.text.some((f) => f.kind === 'pill' && f.problem === 'clipped'), JSON.stringify(c.text));
 });
 
+// mini as a row of 3: the two icons and a pill with `text` in the last slot.
+const rowWithPill = (text) => (story) => {
+  story.scenes[0].layout = 'row';
+  story.scenes[0].items.push({ id: 'p', type: 'pill', text, bg: 'green', at: 'l02' });
+};
+
+test('a long Thai pill in a row of 3 does not wrap inside a word: it is clipped', SLOW, async (t) => {
+  const c = await checkProject(project(t, 'mini', rowWithPill('ดอกเบี้ยเดิมที่ได้รับทุกปีทบต้น')));
+  assert.equal(c.pass, false);
+  assert.ok(c.text.some((f) => f.kind === 'pill' && f.problem === 'clipped'), JSON.stringify(c.text));
+});
+
+test('a pill that fits a row of 3 stays on one line and passes', SLOW, async (t) => {
+  const dir = project(t, 'mini', rowWithPill('ดอกเบี้ยเดิม'));
+  const c = await checkProject(dir);
+  assert.equal(c.pass, true, JSON.stringify(c));
+  const { resolved } = await buildProject(dir);
+  const { page, close } = await openPage(dir);
+  try {
+    const pill = await page.evaluate((s) => {
+      window.__paim.seek(s);
+      const el = document.querySelector('.pill');
+      const r = el.getBoundingClientRect();
+      return { h: r.height, size: parseFloat(getComputedStyle(el).fontSize) };
+    }, resolved.scenes[0].items[2].t + ENTER_DUR + 0.05);
+    assert.ok(pill.h < 2 * 1.4 * pill.size, `one line: ${pill.h} px tall at ${pill.size} px`);
+  } finally {
+    await close();
+  }
+});
+
 test('item text pushed past the safe zone is outside-safe, not right-ui', SLOW, async (t) => {
   // y 700 is above the phone-button column (it starts at y 1000), x 960 puts the pill across SAFE.x1
   const c = await checkProject(project(t, 'mini', (story) => {

@@ -4,17 +4,18 @@
 import { textColorOn } from './colors.mjs';
 import { captionAt } from './captions.mjs';
 import { W, H, HEADLINE, CAPTION } from './layout.mjs';
-import { ENTER_DUR, enterState, itemState, progress, numberAt, barAt } from './motion.mjs';
+import { ENTER_DUR, MARK_DUR, enterState, itemState, progress, numberAt, barAt } from './motion.mjs';
 
 const PRIMARY = 'Sukhumvit Set';
 const FALLBACK = 'IBM Plex Sans Thai';
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const MARK_DUR = 0.3;
 const HIGHLIGHT_DUR = 0.12;
 const FIT_STEP = 4; // px; text that does not fit its zone shrinks in these steps
-const ARROW_GAP = 16; // px between an item's rect and the arrow
+const ARROW_GAP = 16; // px between an item's picture and the arrow
 const ARROW_MIN = 90; // px; shorter arrows are lengthened around their midpoint
 const ARROW_HEAD = 44;
+const RING_PAD = 16; // px between a picture and its ring
+const RING_CLEAR = 8; // px from the ring's centre line to a label: half the 12 px stroke, plus 2
 
 const DATA = window.__PAIM_DATA;
 const stage = document.getElementById('stage');
@@ -148,10 +149,13 @@ function buildItem(item, parent, textColor, side) {
     default:
       throw new Error(`unknown item type "${item.type}"`);
   }
+  v.art = box.querySelector('.art');
+  v.label = null;
   if (hasText(item.label)) {
     const label = el('div', 'label text', box, item.label);
     label.style.color = colorVar(textColor);
     v.texts.push({ kind: 'label', el: label, item: item.id });
+    v.label = label;
   }
   return v;
 }
@@ -195,11 +199,24 @@ function arrowPath(a, b) {
   };
 }
 
-// Full ellipse as two arcs, starting at the upper left like a hand-drawn ring.
-function ringPath(r) {
+// A part of an item (its art area or label) in canvas px, at rest: offsets ignore the item's
+// transform, so marks stay where the item settles.
+function partRect(v, node) {
+  return { x: v.item.rect.x + node.offsetLeft, y: v.item.rect.y + node.offsetTop, w: node.offsetWidth, h: node.offsetHeight };
+}
+
+// Full ellipse as two arcs around the item's picture, starting at the upper left like a hand-drawn ring.
+// It is pulled in on the side where the label is, so the ring and its stroke stay clear of the label.
+function ringPath(v) {
+  const r = partRect(v, v.art);
   const c = centre(r);
-  const rx = r.w / 2 + 16;
-  const ry = r.h / 2 + 16;
+  let rx = r.w / 2 + RING_PAD;
+  let ry = r.h / 2 + RING_PAD;
+  if (v.label) {
+    const l = partRect(v, v.label);
+    if (l.y >= r.y + r.h - 0.5) ry = Math.min(ry, l.y - c.y - RING_CLEAR);
+    else if (l.x >= r.x + r.w - 0.5) rx = Math.min(rx, l.x - c.x - RING_CLEAR);
+  }
   const at = (deg) => {
     const a = deg * Math.PI / 180;
     return `${c.x + rx * Math.cos(a)} ${c.y + ry * Math.sin(a)}`;
@@ -207,29 +224,34 @@ function ringPath(r) {
   return `M ${at(-150)} A ${rx} ${ry} 0 0 1 ${at(30)} A ${rx} ${ry} 0 0 1 ${at(-150)}`;
 }
 
+// Two strokes over the item's picture.
+function crossPaths(v) {
+  const r = partRect(v, v.art);
+  const c = centre(r);
+  const h = Math.min(r.w, r.h) * 0.35;
+  return [`M ${c.x - h} ${c.y - h} L ${c.x + h} ${c.y + h}`, `M ${c.x + h} ${c.y - h} L ${c.x - h} ${c.y + h}`];
+}
+
+// Each stroke's path is worked out when the mark is drawn (the art areas are laid out by then, and
+// depend on t alone), and draws on over its share [from, to] of MARK_DUR.
 function buildMark(mark, svg, byId, textColor) {
   const g = svgEl('g', {}, svg);
   const refs = (mark.type === 'arrow' ? [mark.from, mark.to] : [mark.on]).map((id) => byId.get(id));
-  const strokes = []; // each draws on over its share [from, to] of MARK_DUR
+  const strokes = [];
   const stroke = (d, color, width, from, to) => {
-    const node = svgEl('path', { d, pathLength: 1, 'stroke-width': width, 'stroke-dasharray': '1 1' }, g);
+    const node = svgEl('path', { pathLength: 1, 'stroke-width': width, 'stroke-dasharray': '1 1' }, g);
     node.style.stroke = colorVar(color);
-    strokes.push({ node, from, to });
+    strokes.push({ node, d, from, to });
   };
   if (mark.type === 'arrow') {
-    const path = arrowPath(refs[0].item.rect, refs[1].item.rect);
-    if (path) {
-      stroke(path.shaft, textColor, 14, 0, 0.75);
-      stroke(path.head, textColor, 14, 0.75, 1);
-    }
+    const path = () => arrowPath(partRect(refs[0], refs[0].art), partRect(refs[1], refs[1].art));
+    stroke(() => path()?.shaft ?? '', textColor, 14, 0, 0.75);
+    stroke(() => path()?.head ?? '', textColor, 14, 0.75, 1);
   } else if (mark.type === 'ring') {
-    stroke(ringPath(refs[0].item.rect), 'orange', 12, 0, 1);
+    stroke(() => ringPath(refs[0]), 'orange', 12, 0, 1);
   } else if (mark.type === 'cross') {
-    const r = refs[0].item.rect;
-    const c = centre(r);
-    const h = Math.min(r.w, r.h) * 0.35;
-    stroke(`M ${c.x - h} ${c.y - h} L ${c.x + h} ${c.y + h}`, textColor, 16, 0, 0.5);
-    stroke(`M ${c.x + h} ${c.y - h} L ${c.x - h} ${c.y + h}`, textColor, 16, 0.5, 1);
+    stroke(() => crossPaths(refs[0])[0], textColor, 16, 0, 0.5);
+    stroke(() => crossPaths(refs[0])[1], textColor, 16, 0.5, 1);
   } else {
     throw new Error(`unknown mark type "${mark.type}"`);
   }
@@ -312,6 +334,7 @@ function drawMark(m, t) {
   m.g.style.opacity = String(opacity);
   const p = progress(t, m.mark.t, MARK_DUR);
   for (const s of m.strokes) {
+    s.node.setAttribute('d', s.d());
     const q = progress(p, s.from, s.to - s.from);
     s.node.style.visibility = q > 0 ? 'visible' : 'hidden'; // a zero-length dash would still show a round cap
     s.node.style.strokeDashoffset = String(1 - q);

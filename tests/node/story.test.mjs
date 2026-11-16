@@ -121,7 +121,7 @@ test('number and bar items resolve with their defaults', () => {
     { id: 'p', type: 'bar', value: 0.5, color: 'orange', at: 'l02' },
   ];
   const [n, p] = validateStory(s, T, brand).scenes[0].items;
-  assert.deepEqual([n.from, n.to, n.decimals, n.prefix, n.suffix], [0, 7, 0, '', '%']);
+  assert.deepEqual([n.from, n.to, n.decimals, n.prefix, n.suffix, n.group], [0, 7, 0, '', '%', true]);
   assert.equal(p.value, 0.5);
 });
 
@@ -189,6 +189,9 @@ const REJECTIONS = [
   ['number.source blank', (s) => {
     s.scenes[0].items[0] = { id: 'n', type: 'number', to: 3, color: 'green', source: '  ', at: 'l01' };
   }, /source/],
+  ['number.group not a boolean', (s) => {
+    s.scenes[0].items[0] = { id: 'n', type: 'number', to: 3, color: 'green', source: 'x', group: 'yes', at: 'l01' };
+  }, /group/],
   ['bar.value above 1', (s) => {
     s.scenes[0].items[0] = { id: 'p', type: 'bar', value: 1.2, color: 'green', at: 'l01' };
   }, /value/],

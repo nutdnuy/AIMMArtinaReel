@@ -16,7 +16,7 @@ Item   common: {id, type, at: Anchor, slot?: int (default = index), enter?: pop|
        sprite: {sprite: /^[a-z0-9-]+$/, label?: string}        # <project>/gen/sprites/<sprite>.png
        icon:   {icon: phosphor-name, weight?: fill|duotone, color: orange|green|charcoal|cream, label?: string}
        pill:   {text, bg: orange|green|charcoal}
-       number: {to: number, from?: 0, decimals?: 0, prefix?: "", suffix?: "", color, label?, source: non-empty string}
+       number: {to: number, from?: 0, decimals?: 0, prefix?: "", suffix?: "", group?: true, color, label?, source: non-empty string}
        bar:    {value: 0..1, color, label?}
 Mark   arrow: {type, from: itemId, to: itemId, at}   ring: {type, on: itemId, at}   cross: {type, on: itemId, at}
 Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "-0.1" seconds
@@ -52,7 +52,7 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
 | `row` | 3 | side by side, y 440–980; width 440 (1 item), 435 (2), 280 (3); label under the picture |
 | `stack` | 3 | 760 wide (x 160–920), 240 tall (224 for 3), top to bottom, centred; a sprite or icon label sits beside its picture |
 | `versus` | 2 | 760 × 340, top (y 440) and bottom (y 820): the "this or that" split; labels beside the pictures |
-| `grid` | 6 | 2 columns × 3 rows of 435 × 220, left to right then down; a lone last cell is centred |
+| `grid` | 6 | 2 columns × 3 rows of 435 × 220, left to right then down; a lone last cell is centred. The right cell of the last row reaches the phone-button column: a long label there fails `check.mjs` with `right-ui` |
 
 Pick by what the line compares: one thing → `center`; a sequence or cause → `row`; a ranked list
 → `stack`; a choice between two → `versus`; many members of a group → `grid`. Fewer, larger
@@ -66,10 +66,13 @@ pictures read better than full grids: prefer `center`, `versus` and `row` of 2.
   `trend-down`, `shield-check`, `receipt`, `bank`, `wallet`, `scales`, …). An unknown name fails
   with "Did you mean: …" suggestions. Names ending `-logo` are refused. The same icon may be used
   with both weights in one story.
-- `pill`: a short phrase on a coloured pill (64 px, shrinks to 32 px to fit its slot).
-- `number`: a figure that counts up over 0.8 s on a chip of its `color` (140 px, shrinks to
-  56 px). `source` is required and must say where the figure comes from: publisher, page, URL and
-  access date. No source, no number on screen.
+- `pill`: a short phrase on a coloured pill, always on one line (64 px, shrinks to 32 px to fit
+  its slot; a phrase that does not fit even then is `clipped`). Keep it to one short phrase.
+- `number`: a figure that counts up over 0.8 s on a chip of its `color`, on one line (140 px,
+  shrinks to 56 px). Thousands separators are shown (`1,050`, `1,102.50`) unless
+  `"group": false` (use that for a year). `source` is required and must say where the figure
+  comes from (rules in `script-style.md`, "Figures and sources"). No source, no number on
+  screen.
 - `bar`: a bar that fills to `value` over 0.6 s; it grows upwards in a tall rect, rightwards in a
   wide one.
 - `label`: 52 px under the picture (beside it in `versus` and `stack`). Labels are not shrunk:
@@ -77,11 +80,16 @@ pictures read better than full grids: prefer `center`, `versus` and `row` of 2.
 
 ## Marks
 
-- `arrow` from one item to another, drawn on over 0.3 s in the scene's text colour.
-- `ring`: an orange ellipse around an item (its whole rect, label included).
-- `cross`: two strokes over an item, in the scene's text colour: "not this".
+Marks are drawn on the item's picture (its art area), never over its label.
 
-A mark shows only while every item it points at is visible.
+- `arrow` from one picture to another ("leads to"), drawn on over 0.3 s in the scene's text
+  colour.
+- `ring`: an orange ellipse around a picture ("this one"), pulled in on the label's side so the
+  label stays clear.
+- `cross`: two strokes over a picture, in the scene's text colour ("not this").
+
+A mark shows only while every item it points at is visible. Add a mark only when it says one of
+those three things.
 
 ## Motion vocabulary
 
@@ -109,6 +117,18 @@ Every frame is a function of time alone, so any frame renders the same in any or
 - Highlight the one phrase per line that carries the point.
 - Open with a hook scene (a `versus` suits a "this or that" topic); end on a takeaway scene.
 - Headlines are a few words (they shrink from 96 to 56 px to fit one 900 px line).
+
+## Fixing a dead beat ("nothing new for more than 3 s")
+
+Work down this list; stop at the first that fixes it.
+
+1. Spread what the scene already has: move items' `at` to later phrases (`l04@2` instead of
+   `l04`), so they arrive one by one as the line names them.
+2. Split a long scene in two at the line where the idea turns, each with its own layout.
+3. Add a mark only when it says something: `ring` = this one, `arrow` = leads to, `cross` = not
+   this. Never add a mark that means nothing.
+4. If a line has nothing to show, the line is too long: shorten or split it in `script.md`, then
+   run `timing.py` again.
 
 ## Worked example (the smallest story)
 
@@ -150,6 +170,9 @@ a sourced number and all three marks.
 
 ## `check.mjs` findings and their usual fix
 
+To look at the result, `still.mjs <project> --scenes <out.png>` takes one frame per scene once
+its last entrance, count-up and mark have finished.
+
 `check.mjs` builds the project, opens it, and measures every text box at settled moments (after
 each entrance; an item with an idle loop is judged over the loop's whole reach). It prints
 `font: …`, then `text:`, `dead beats:` and `overlap:` lines, each `PASS` or `FAIL (n)` with one
@@ -159,9 +182,9 @@ line per finding: `<time> <kind> "<text>": <problem>`. Exit 0 only when all thre
 |---|---|---|
 | `outside-safe` | text leaves x 70–1010, y 220–1500 (a headline its zone) | shorten the headline or label; move a free item (`x`/`y`) inward; drop an idle loop near an edge |
 | `right-ui` | text touches the phone-button column (x ≥ 930, y ≥ 1000) | shorten the label; move the item to another slot or layout; move a free item left or up |
-| `clipped` | text does not fit its box even at its smallest size (a `number` or `pill` too long for its slot) | fewer digits (use a suffix such as `ล้าน`), a shorter pill, or a bigger layout (`center`, row of 2) |
+| `clipped` | text does not fit its box even at its smallest size (a `number` or `pill` too long for its one line) | fewer digits (use a suffix such as `ล้าน`), a shorter pill, or a bigger layout (`center`, row of 2) |
 | `overlap` | a caption or headline covers a picture | do not place free items over y 1250–1480 or the headline zone; use slots |
-| dead beat `a to b` | nothing new for more than 3.0 s | add an item, mark or headline on a phrase inside the gap, or split the scene |
+| dead beat `a to b` | nothing new for more than 3.0 s | see "Fixing a dead beat" above |
 
 `build.mjs` problems (exit 2) name the scene and item, for example
 `scene "hook" item "etf": sprite "basket" has not been generated: run scripts/gen_sprites.py first`
