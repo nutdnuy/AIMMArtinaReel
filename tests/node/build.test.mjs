@@ -28,7 +28,7 @@ test('mini builds into build/', async (t) => {
   const data = readFileSync(join(buildDir, 'data.js'), 'utf8');
   assert.match(data, /^window\.__PAIM_DATA = /);
   assert.match(data, /<svg/);
-  assert.ok(data.includes('"buildings"') && data.includes('"basket"'), 'both icons are in data.js');
+  assert.ok(data.includes('"buildings:fill"') && data.includes('"basket:fill"'), 'both icons are in data.js');
   assert.ok(!data.includes('/Users/'), 'data.js holds no absolute home path');
   assert.deepEqual(JSON.parse(readFileSync(join(buildDir, 'resolved.json'), 'utf8')), resolved);
 });
@@ -92,4 +92,46 @@ test('a logo path that does not exist is named', async (t) => {
   const dir = project(t);
   saveProfile({ logo: join(dir, 'nope', 'gone.png') });
   await assert.rejects(buildProject(dir), /nope\/gone\.png/);
+});
+
+test('one icon in two weights builds and both drawings are in data.js', async (t) => {
+  const dir = project(t);
+  const story = readStory(dir);
+  story.scenes[0].items = [
+    { id: 'a', type: 'icon', icon: 'coins', weight: 'fill', color: 'orange', at: 'l01' },
+    { id: 'b', type: 'icon', icon: 'coins', weight: 'duotone', color: 'green', at: 'l02' },
+  ];
+  writeStory(dir, story);
+  const { buildDir } = await buildProject(dir);
+  const data = readFileSync(join(buildDir, 'data.js'), 'utf8');
+  const icons = JSON.parse(data.slice('window.__PAIM_DATA = '.length, data.lastIndexOf(';'))).icons;
+  assert.deepEqual(Object.keys(icons).sort(), ['coins:duotone', 'coins:fill']);
+  assert.notEqual(icons['coins:fill'], icons['coins:duotone']);
+});
+
+test('the fallback font is four files with their unicode ranges', async (t) => {
+  const { buildDir } = await buildProject(project(t));
+  const data = readFileSync(join(buildDir, 'data.js'), 'utf8');
+  const urls = JSON.parse(data.slice('window.__PAIM_DATA = '.length, data.lastIndexOf(';'))).fallbackFontUrls;
+  for (const weight of ['400', '700']) {
+    assert.equal(urls[weight].length, 2);
+    const [thai, latin] = ['thai', 'latin'].map((s) => urls[weight].find((e) => e.url.includes(`-${s}-`)));
+    assert.match(thai.unicodeRange, /U\+0E01-0E5B/);
+    assert.match(latin.unicodeRange, /U\+0000-00FF/);
+    for (const e of urls[weight]) assert.ok(existsSync(join(buildDir, e.url)), `${e.url} is missing`);
+  }
+});
+
+test('an absolute story.music is not written into the build', async (t) => {
+  const dir = project(t);
+  const music = join(tempDir(t, 'paim-music'), 'bed.wav');
+  writeFileSync(music, 'RIFF');
+  const story = readStory(dir);
+  story.music = music;
+  writeStory(dir, story);
+  const { buildDir, resolved } = await buildProject(dir);
+  for (const f of ['data.js', 'resolved.json']) {
+    assert.ok(!readFileSync(join(buildDir, f), 'utf8').includes(music), `${f} holds the absolute music path`);
+  }
+  assert.ok(!JSON.stringify(resolved).includes(music));
 });

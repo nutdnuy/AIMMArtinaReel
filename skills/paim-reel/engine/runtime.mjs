@@ -77,8 +77,9 @@ function fitFont(text, fits, max, min) {
 // ---------- build: one DOM tree for the whole reel, made once
 
 function iconNode(item) {
-  const source = DATA.icons?.[item.icon];
-  if (typeof source !== 'string') throw new Error(`__PAIM_DATA.icons has no SVG for "${item.icon}"`);
+  const key = `${item.icon}:${item.weight ?? 'fill'}`;
+  const source = DATA.icons?.[key];
+  if (typeof source !== 'string') throw new Error(`__PAIM_DATA.icons has no SVG for "${key}"`);
   const svg = new DOMParser().parseFromString(source, 'image/svg+xml').documentElement;
   if (svg.localName !== 'svg') throw new Error(`icon "${item.icon}" is not an SVG`);
   const hex = DATA.brand.colors[item.color];
@@ -401,16 +402,21 @@ function fontUsed() {
   return FALLBACK;
 }
 
-// One @font-face per weight, each from its own file: __PAIM_DATA.fallbackFontUrls {"400", "700"}.
+// One FontFace per weight and subset, each from its own file with its unicode range:
+// __PAIM_DATA.fallbackFontUrls {"400": [{url, unicodeRange}, ...], "700": [...]}.
 async function loadFallbackFont() {
-  const urls = DATA.fallbackFontUrls ?? {};
-  const faces = ['400', '700'].map((weight) => {
-    const url = urls[weight];
-    if (!hasText(url)) throw new Error(`__PAIM_DATA.fallbackFontUrls["${weight}"] is missing`);
-    const face = new FontFace(FALLBACK, `url(${JSON.stringify(url)})`, { weight });
-    document.fonts.add(face);
-    return face.load().catch(() => {
-      throw new Error(`cannot load the fallback font ${url}`);
+  const entries = DATA.fallbackFontUrls ?? {};
+  const faces = ['400', '700'].flatMap((weight) => {
+    const list = entries[weight];
+    if (!Array.isArray(list) || list.length === 0) throw new Error(`__PAIM_DATA.fallbackFontUrls["${weight}"] is missing`);
+    return list.map(({ url, unicodeRange }) => {
+      if (!hasText(url)) throw new Error(`__PAIM_DATA.fallbackFontUrls["${weight}"] has an entry without a url`);
+      const descriptors = hasText(unicodeRange) ? { weight, unicodeRange } : { weight };
+      const face = new FontFace(FALLBACK, `url(${JSON.stringify(url)})`, descriptors);
+      document.fonts.add(face);
+      return face.load().catch(() => {
+        throw new Error(`cannot load the fallback font ${url}`);
+      });
     });
   });
   await Promise.all(faces);

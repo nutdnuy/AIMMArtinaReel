@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, chmodSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { renderProject } from '../../skills/paim-reel/scripts/render.mjs';
 import { stills } from '../../skills/paim-reel/scripts/still.mjs';
+import { saveProfile } from '../../skills/paim-reel/lib/profile.mjs';
 import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { ENTER_DUR } from '../../skills/paim-reel/engine/motion.mjs';
 import { copyFixture, tempDir, sineWav, solidPng, ffprobe } from '../helpers.mjs';
@@ -184,4 +186,128 @@ test('a broken data.js surfaces the page message and does not hang', SLOW, async
   await buildProject(dir);
   writeFileSync(join(dir, 'build', 'data.js'), 'window.__PAIM_DATA = {};\n');
   await assert.rejects(openPage(dir), /data\.js did not set window\.__PAIM_DATA|__PAIM_DATA/);
+});
+
+// ---- fix round 1
+
+// A fake ffmpeg at the front of PATH: writes its pid to `pid`, creates its output file, ignores SIGTERM,
+// drains stdin and exits 0 when stdin ends. A render that "cleans up" with SIGTERM leaves it running.
+function fakeFfmpeg(t) {
+  const bin = tempDir(t, 'paim-fakebin');
+  const pidFile = join(bin, 'pid');
+  const script = join(bin, 'ffmpeg');
+  writeFileSync(script, `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+fs.writeFileSync(process.argv[process.argv.length - 1], 'x');
+process.on('SIGTERM', () => {});
+process.stdin.resume();
+process.stdin.on('end', () => process.exit(0));
+setTimeout(() => process.exit(0), 20000);
+`);
+  chmodSync(script, 0o755);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}:${oldPath}`;
+  t.after(() => {
+    process.env.PATH = oldPath;
+    try { process.kill(Number(readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch { /* already gone or never started */ }
+  });
+  return pidFile;
+}
+
+const alive = (pidFile) => {
+  if (!existsSync(pidFile)) return false;
+  try {
+    process.kill(Number(readFileSync(pidFile, 'utf8')), 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const partials = (dir) => (existsSync(join(dir, 'renders')) ? readdirSync(join(dir, 'renders')).filter((f) => f.includes('.partial')) : []);
+
+test('a failing seek leaves no partial file and no live ffmpeg', SLOW, async (t) => {
+  const dir = project(t);
+  const pidFile = fakeFfmpeg(t);
+  await assert.rejects(
+    renderProject(dir, { onFrame: (i) => { if (i === 10) throw new Error('boom at frame 10'); } }),
+    /boom at frame 10/,
+  );
+  assert.deepEqual(partials(dir), []);
+  assert.equal(alive(pidFile), false, 'ffmpeg must be dead when renderProject has rejected');
+});
+
+test('a real ffmpeg run that fails mid-way leaves no partial file', SLOW, async (t) => {
+  const dir = project(t);
+  await assert.rejects(
+    renderProject(dir, { onFrame: (i) => { if (i === 10) throw new Error('boom at frame 10'); } }),
+    /boom at frame 10/,
+  );
+  assert.deepEqual(partials(dir), []);
+});
+
+test('a page that fails to open leaves no partial file and no live ffmpeg', SLOW, async (t) => {
+  const dir = project(t);
+  const pidFile = fakeFfmpeg(t);
+  const logo = join(tempDir(t, 'paim-logo'), 'logo.png');
+  writeFileSync(logo, 'this is not a PNG');
+  saveProfile({ logo });
+  await assert.rejects(renderProject(dir), /cannot load image assets\/logo\.png/);
+  assert.deepEqual(partials(dir), []);
+  assert.equal(alive(pidFile), false, 'no ffmpeg may be left running (or even started)');
+});
+
+test('data.js carries both weights of one icon and the page draws them', SLOW, async (t) => {
+  const dir = project(t);
+  const story = readJson(join(dir, 'story.json'));
+  story.scenes[0].items = [
+    { id: 'a', type: 'icon', icon: 'coins', weight: 'fill', color: 'orange', at: 'l01' },
+    { id: 'b', type: 'icon', icon: 'coins', weight: 'duotone', color: 'green', at: 'l02' },
+  ];
+  writeJson(join(dir, 'story.json'), story);
+  await withPage(dir, async (page) => {
+    await seek(page, 3.0);
+    const svgs = await page.evaluate(() => [...document.querySelectorAll('.icon-item svg')].map((s) => s.innerHTML));
+    assert.equal(svgs.length, 2);
+    assert.notEqual(svgs[0], svgs[1], 'fill and duotone must be different drawings');
+  });
+});
+
+test('the fallback font has real Thai and Latin faces (forceFallback)', SLOW, async (t) => {
+  const dir = project(t);
+  await buildProject(dir, { forceFallback: true });
+  const { page, close } = await openPage(dir);
+  try {
+    assert.equal(await page.evaluate(() => window.__paim.fontUsed()), 'IBM Plex Sans Thai');
+    const widths = await page.evaluate(() => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      const width = (family) => { ctx.font = `700 64px ${family}`; return ctx.measureText('ETF 5% 2026').width; };
+      return { plex: width('"IBM Plex Sans Thai", sans-serif'), plain: width('sans-serif') };
+    });
+    assert.notEqual(widths.plex, widths.plain, 'Latin text must be drawn by the IBM Plex Sans Thai latin subset');
+    const faces = await page.evaluate(() => [...document.fonts]
+      .filter((f) => f.family.replace(/"/g, '') === 'IBM Plex Sans Thai')
+      .map((f) => ({ weight: f.weight, status: f.status })));
+    assert.equal(faces.length, 4);
+    assert.ok(faces.every((f) => f.status === 'loaded'), JSON.stringify(faces));
+  } finally {
+    await close();
+  }
+});
+
+test('an absolute story.music is still mixed', SLOW, async (t) => {
+  const dir = project(t);
+  addVoice(dir);
+  const music = join(tempDir(t, 'paim-music'), 'bed.wav');
+  sineWav(music, 6, 220);
+  const story = readJson(join(dir, 'story.json'));
+  story.music = music;
+  writeJson(join(dir, 'story.json'), story);
+  const r = await renderProject(dir);
+  // After the voice ends (3 s) only the music bed is left: faint, but not silence.
+  const probe = spawnSync('ffmpeg', ['-hide_banner', '-ss', '3.2', '-t', '0.6', '-i', r.file, '-vn', '-af', 'volumedetect', '-f', 'null', '-'], { encoding: 'utf8' });
+  const mean = Number(/mean_volume: (-?[\d.]+) dB/.exec(probe.stderr)?.[1]);
+  assert.ok(mean > -70, `the music bed is missing after the voice ends (mean ${mean} dB)`);
+  assert.ok(!readFileSync(join(dir, 'build', 'data.js'), 'utf8').includes(music));
 });

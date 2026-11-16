@@ -19,11 +19,10 @@ export class BuildError extends Error {
 
 const SKILL = fileURLToPath(new URL('..', import.meta.url));
 const ENGINE = join(SKILL, 'engine');
-const FONT_FILES = join(SKILL, 'node_modules', '@fontsource', 'ibm-plex-sans-thai', 'files');
-const FALLBACK_FONTS = Object.freeze({
-  400: 'ibm-plex-sans-thai-thai-400-normal.woff2',
-  700: 'ibm-plex-sans-thai-thai-700-normal.woff2',
-});
+const FONT_PACKAGE = join(SKILL, 'node_modules', '@fontsource', 'ibm-plex-sans-thai');
+const FONT_FILES = join(FONT_PACKAGE, 'files');
+const FONT_SUBSETS = Object.freeze(['thai', 'latin']);
+const FONT_WEIGHTS = Object.freeze(['400', '700']);
 
 function readJson(file, hint) {
   if (!existsSync(file)) throw new BuildError(`${file} not found${hint ? `: ${hint}` : ''}`);
@@ -46,21 +45,32 @@ function spriteNames(projectDir) {
     .map((f) => f.slice(0, -'.png'.length));
 }
 
-// Icon SVGs by name, the way runtime.mjs looks them up (item.icon).
+// Icon SVGs keyed "<name>:<weight>", the way runtime.mjs looks them up.
 function iconTable(resolved) {
   const icons = {};
-  const weights = {};
   for (const scene of resolved.scenes) {
     for (const item of scene.items) {
-      if (item.type !== 'icon') continue;
-      if (weights[item.icon] && weights[item.icon] !== item.weight) {
-        throw new BuildError(`icon "${item.icon}" is used with both weights (${weights[item.icon]} and ${item.weight}): the page keeps one drawing per icon name, so use one weight for it`);
-      }
-      weights[item.icon] = item.weight;
-      icons[item.icon] = iconSvg(item.icon, item.weight);
+      if (item.type === 'icon') icons[`${item.icon}:${item.weight}`] = iconSvg(item.icon, item.weight);
     }
   }
   return icons;
+}
+
+// The fallback font faces of one weight, from the package's own CSS: [{url, unicodeRange}] for the thai
+// and latin subsets. The files are copied into build/assets and the urls are build-relative.
+function fallbackFaces(weight, buildDir) {
+  const css = readFileSync(join(FONT_PACKAGE, `${weight}.css`), 'utf8');
+  return FONT_SUBSETS.map((subset) => {
+    const name = `ibm-plex-sans-thai-${subset}-${weight}-normal`;
+    const block = new RegExp(`/\\* ${name} \\*/\\s*@font-face\\s*\\{[^}]*?unicode-range:\\s*([^;]+);`).exec(css);
+    if (!block) throw new BuildError(`${weight}.css of @fontsource/ibm-plex-sans-thai has no ${subset} block: run \`npm install\` in the skill folder`);
+    const file = `${name}.woff2`;
+    if (!existsSync(join(FONT_FILES, file))) {
+      throw new BuildError(`fallback font ${file} is missing: run \`npm install\` in the skill folder`);
+    }
+    copyFileSync(join(FONT_FILES, file), join(buildDir, 'assets', file));
+    return { url: `assets/${file}`, unicodeRange: block[1].trim() };
+  });
 }
 
 export async function buildProject(projectDir, opts = {}) {
@@ -71,10 +81,8 @@ export async function buildProject(projectDir, opts = {}) {
 
   const resolved = validateStory(story, timing, brand, { sprites: spriteNames(projectDir) });
 
-  if (resolved.music) {
-    const music = inProject(projectDir, resolved.music);
-    if (!existsSync(music)) throw new BuildError(`story.music: file not found: ${music}`);
-  }
+  const musicSource = resolved.music ? inProject(projectDir, resolved.music) : null;
+  if (musicSource && !existsSync(musicSource)) throw new BuildError(`story.music: file not found: ${musicSource}`);
   const logoSource = brand.logo ? inProject(projectDir, brand.logo) : null;
   if (logoSource && !existsSync(logoSource)) throw new BuildError(`logo: file not found: ${logoSource}`);
 
@@ -90,17 +98,18 @@ export async function buildProject(projectDir, opts = {}) {
   }
 
   const fallbackFontUrls = {};
-  for (const [weight, file] of Object.entries(FALLBACK_FONTS)) {
-    if (!existsSync(join(FONT_FILES, file))) {
-      throw new BuildError(`fallback font ${file} is missing: run \`npm install\` in the skill folder`);
-    }
-    copyFileSync(join(FONT_FILES, file), join(buildDir, 'assets', file));
-    fallbackFontUrls[weight] = `assets/${file}`;
-  }
+  for (const weight of FONT_WEIGHTS) fallbackFontUrls[weight] = fallbackFaces(weight, buildDir);
 
   const used = new Set(resolved.scenes.flatMap((s) => s.items).filter((i) => i.type === 'sprite').map((i) => i.sprite));
   for (const name of used) {
     copyFileSync(join(projectDir, 'gen', 'sprites', `${name}.png`), join(buildDir, 'assets', 'sprites', `${name}.png`));
+  }
+
+  // The music is copied too, so the build never names a path outside it.
+  if (musicSource) {
+    const name = `music${extname(musicSource).toLowerCase()}`;
+    copyFileSync(musicSource, join(buildDir, 'assets', name));
+    resolved.music = `assets/${name}`;
   }
 
   if (logoSource) {

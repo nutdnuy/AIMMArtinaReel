@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // render.mjs <project> [--from s] [--to s] [--preview]: frame-accurate render of a project to renders/<slug>.mp4.
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
-import { join, resolve, isAbsolute } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { buildProject, BuildError, exitWithError, isMain } from './build.mjs';
 import { openPage } from '../lib/serve.mjs';
@@ -29,15 +29,14 @@ function ffmpegProcess(args) {
 }
 
 // Audio inputs and the filter graph for the final render, or null for a silent video.
-function audioPlan(projectDir, resolved, videoInputs) {
+function audioPlan(projectDir, buildDir, resolved, videoInputs) {
   const voice = join(projectDir, 'voice', 'voice.wav');
   if (resolved.estimated || !existsSync(voice)) return null;
   const total = resolved.duration;
   const inputs = ['-i', voice];
   let graph = `[${videoInputs}:a]aresample=48000,apad=whole_dur=${total}[voice]`;
   if (resolved.music) {
-    const music = isAbsolute(resolved.music) ? resolved.music : resolve(projectDir, resolved.music);
-    inputs.push('-stream_loop', '-1', '-i', music);
+    inputs.push('-stream_loop', '-1', '-i', join(buildDir, resolved.music)); // build.mjs copied it there
     const fade = Math.max(total - resolved.voiceEnd, 0.01);
     graph += `;[${videoInputs + 1}:a]aresample=48000,atrim=duration=${total},`
       + `volume=${MUSIC_DB}dB,afade=t=out:st=${resolved.voiceEnd}:d=${fade}[music]`
@@ -51,7 +50,7 @@ function audioPlan(projectDir, resolved, videoInputs) {
 export async function renderProject(projectDir, opts = {}) {
   projectDir = resolve(projectDir);
   const fps = 30;
-  const { resolved } = await buildProject(projectDir);
+  const { resolved, buildDir } = await buildProject(projectDir);
   const total = Math.round(resolved.duration * fps);
   const partial = opts.from !== undefined || opts.to !== undefined;
   const first = Math.round((opts.from ?? 0) * fps);
@@ -66,7 +65,7 @@ export async function renderProject(projectDir, opts = {}) {
   const file = join(outDir, `${base}.mp4`);
   const tmp = join(outDir, `${base}.partial.mp4`);
 
-  const audio = partial ? null : audioPlan(projectDir, resolved, 1);
+  const audio = partial ? null : audioPlan(projectDir, buildDir, resolved, 1);
   const args = ['-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', 'pipe:0'];
   if (audio) args.push(...audio.inputs, '-filter_complex', audio.graph, '-map', '0:v', '-map', '[a]');
   // JPEG frames are full-range BT.601 YUV: go through RGB to limited-range BT.709 (plain yuv420p, not
@@ -77,13 +76,15 @@ export async function renderProject(projectDir, opts = {}) {
   if (audio) args.push('-c:a', 'aac', '-b:a', '192k', '-ar', '48000');
   args.push('-t', String((last - first) / fps), '-movflags', '+faststart', tmp);
 
+  // ffmpeg starts only once the page is open, so a failed page load leaves nothing to clean up.
+  const { page, close } = await openPage(projectDir);
   const { child, done } = ffmpegProcess(args);
-  const { page, close } = await openPage(projectDir).catch((err) => {
-    child.stdin.destroy();
-    throw err;
-  });
+  let ffmpegError = null; // set when ffmpeg dies early, so the frame loop stops at once
+  done.catch((err) => { ffmpegError = err; });
   try {
     for (let i = first; i < last; i++) {
+      if (ffmpegError) throw ffmpegError;
+      await opts.onFrame?.(i); // progress hook; a throw here aborts the render like a failed seek
       await page.evaluate((t) => window.__paim.seek(t), i / fps);
       const jpeg = await page.screenshot({ type: 'jpeg', quality: 92 });
       if (!child.stdin.write(jpeg)) {
@@ -93,7 +94,9 @@ export async function renderProject(projectDir, opts = {}) {
     child.stdin.end();
     await done;
   } catch (err) {
-    child.kill();
+    // Stop ffmpeg for good and wait for it to exit before touching its output file.
+    child.kill('SIGKILL');
+    await done.catch(() => {});
     rmSync(tmp, { force: true });
     throw err;
   } finally {
