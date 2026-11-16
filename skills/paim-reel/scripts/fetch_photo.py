@@ -78,7 +78,10 @@ def timeout() -> float:
 
 
 def user_agent() -> str:
-    return os.environ.get("PAIM_USER_AGENT", "").strip() or USER_AGENT
+    """PAIM_USER_AGENT as one line of printable ASCII (http.client refuses a newline or control character in a
+    header, and a header cannot hold Thai text); whitespace runs become one space. Empty: the default."""
+    text = "".join(c for c in os.environ.get("PAIM_USER_AGENT", "") if c.isspace() or (c.isascii() and c.isprintable()))
+    return " ".join(text.split()) or USER_AGENT
 
 
 def non_public(address: str) -> bool:

@@ -164,6 +164,31 @@ def test_paim_user_agent_replaces_the_user_agent(project, site):
     assert headers["User-Agent"] == "my-client/2.0 (test)"
 
 
+@pytest.mark.parametrize("raw, expected", [
+    ("my-client/2.0 (test)", "my-client/2.0 (test)"),
+    ("  spaced   out \t agent  ", "spaced out agent"),
+    ("two\nlines", "two lines"),
+    ("crlf\r\nX-Injected: 1", "crlf X-Injected: 1"),
+    ("bell\x07 and soh\x01 and del\x7f", "bell and soh and del"),
+    ("thai ตัวอย่าง agent", "thai agent"),
+    ("\n\r\x01 \t", fetch_photo.USER_AGENT),
+    ("", fetch_photo.USER_AGENT),
+])
+def test_user_agent_is_one_line_of_printable_ascii(monkeypatch, raw, expected):
+    monkeypatch.setenv("PAIM_USER_AGENT", raw)
+    assert fetch_photo.user_agent() == expected
+
+
+def test_a_paim_user_agent_with_a_newline_does_not_crash_the_fetch(project, site):
+    url = site.put("/a.jpg", encode(picture(), "JPEG"))
+    r = fetch(project, "bank", url, env={"PAIM_USER_AGENT": "my-client/2.0\r\nX-Injected: 1\x07 (test)"})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr
+    [(_, headers)] = site.hits
+    assert headers["User-Agent"] == "my-client/2.0 X-Injected: 1 (test)"
+    assert "X-Injected" not in headers
+
+
 def test_license_and_credit_are_stored(project, site):
     url = site.put("/a.jpg", encode(picture(), "JPEG"))
     r = fetch(project, "bank", url, "--license", "CC0", "--credit", "Jane  Doe, via Commons")

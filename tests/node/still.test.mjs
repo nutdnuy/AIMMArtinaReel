@@ -81,5 +81,30 @@ test('still.mjs with an explicit time list still works', SLOW, (t) => {
   const out = join(tempDir(t, 'paim-stills'), 'sheet.png');
   const r = spawnSync(process.execPath, [STILL_CLI, dir, '0.5,2.0,2.9', out], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(readFileSync(out).readUInt32BE(16), 12 + 3 * (Math.round(1080 * 0.3) + 12));
+  const png = readFileSync(out);
+  assert.equal(png.readUInt32BE(16), 12 + 3 * (Math.round(1080 * 0.3) + 12), 'three frames in one row');
+  assert.equal(png.readUInt32BE(20), 12 + (Math.round(1920 * 0.3) + 12), 'one row high');
+});
+
+test('still.mjs lays 12 frames out in rows of at most 4', SLOW, (t) => {
+  const dir = project(t);
+  const out = join(tempDir(t, 'paim-stills'), 'sheet.png');
+  const times = Array.from({ length: 12 }, (_, i) => (0.3 + i * 0.2).toFixed(1)).join(',');
+  const r = spawnSync(process.execPath, [STILL_CLI, dir, times, out], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const png = readFileSync(out);
+  const w = Math.round(1080 * 0.3);
+  const h = Math.round(1920 * 0.3);
+  assert.equal(png.readUInt32BE(16), 12 + 4 * (w + 12), 'four columns, not twelve');
+  assert.equal(png.readUInt32BE(20), 12 + 3 * (h + 12), 'three rows');
+});
+
+test('still.mjs: a fifth frame starts a second row', SLOW, (t) => {
+  const dir = project(t);
+  const out = join(tempDir(t, 'paim-stills'), 'sheet.png');
+  const r = spawnSync(process.execPath, [STILL_CLI, dir, '0.3,0.6,0.9,1.2,1.5', out], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const png = readFileSync(out);
+  assert.equal(png.readUInt32BE(16), 12 + 4 * (Math.round(1080 * 0.3) + 12));
+  assert.equal(png.readUInt32BE(20), 12 + 2 * (Math.round(1920 * 0.3) + 12));
 });

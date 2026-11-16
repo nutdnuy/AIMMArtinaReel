@@ -104,10 +104,11 @@ if [ -z "$provider" ]; then
   echo "MISSING image-cli (not chosen)"; missing=1
 else
   cmd="${PAIM_IMAGE_CMD:-$(profile_get image_cmd)}"
-  [ -n "$cmd" ] || cmd="$provider"
+  label="$provider"
+  if [ -n "$cmd" ]; then label="custom command"; else cmd="$provider"; fi
   exe="${cmd%% *}"
   if command -v "$exe" >/dev/null 2>&1; then
-    echo "image-cli: ok $provider"
+    echo "image-cli: ok $label"
   else
     echo "MISSING image-cli ($exe not found)"; missing=1
   fi

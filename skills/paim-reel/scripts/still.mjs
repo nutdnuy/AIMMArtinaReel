@@ -9,6 +9,7 @@ import { W, H, FPS } from '../engine/layout.mjs';
 import { ENTER_DUR, NUMBER_DUR, BAR_DUR, MARK_DUR } from '../engine/motion.mjs';
 
 const GAP = 12;
+const PER_ROW = 4; // frames per row, so a sheet of many scenes stays readable
 const SETTLE = 0.05; // s after the last motion ends
 
 // When an item has finished moving: its entrance, and a number's count-up or a bar's fill.
@@ -28,7 +29,7 @@ export function settledTimes(resolved) {
   });
 }
 
-// Draws each time at full size, then lays the frames side by side, scaled, in one PNG.
+// Draws each time at full size, then lays the frames out scaled in one PNG, at most PER_ROW to a row.
 // `times` is a list of seconds, or 'scenes' for settledTimes().
 export async function stills(projectDir, times, outFile, scale = 0.3) {
   const scenes = times === 'scenes';
@@ -46,11 +47,13 @@ export async function stills(projectDir, times, outFile, scale = 0.3) {
     }
     const w = Math.round(W * scale);
     const h = Math.round(H * scale);
+    const cols = Math.min(frames.length, PER_ROW);
+    const rows = Math.ceil(frames.length / PER_ROW);
     const sheet = await page.context().browser().newPage({
-      viewport: { width: GAP + frames.length * (w + GAP), height: h + 2 * GAP },
+      viewport: { width: GAP + cols * (w + GAP), height: GAP + rows * (h + GAP) },
     });
     await sheet.setContent(
-      `<body style="margin:0;padding:${GAP}px;display:flex;gap:${GAP}px;background:#252B31">${frames
+      `<body style="margin:0;padding:${GAP}px;display:grid;grid-template-columns:repeat(${cols},${w}px);gap:${GAP}px;background:#252B31">${frames
         .map((f) => `<img width="${w}" height="${h}" src="data:image/png;base64,${f}">`)
         .join('')}</body>`,
     );

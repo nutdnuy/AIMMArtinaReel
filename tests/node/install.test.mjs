@@ -123,16 +123,34 @@ test('doctor: no profile under codex needs no choice', () => {
   assert.match(r.out, /^onboarding: needed$/m);
 });
 
-test('doctor: image_cmd in the profile is honoured', () => {
+test('doctor: image_cmd in the profile is honoured and reported as a custom command', () => {
   const r = doctor({ profile: { image_cli: 'gemini', image_cmd: 'my-image-tool --flag' }, bins: ['my-image-tool'] });
+  assert.match(r.out, /^image-cli: ok custom command$/m);
+  assert.doesNotMatch(r.out, /^image-cli: ok gemini$/m);
+});
+
+test('doctor: a custom command that is not installed is still MISSING', () => {
+  const r = doctor({ profile: { image_cli: 'gemini', image_cmd: 'my-image-tool --flag' } });
+  assert.match(r.out, /^MISSING image-cli \(my-image-tool not found\)$/m);
+});
+
+test('doctor: image_cmd null in the profile is the plain provider', () => {
+  const r = doctor({ profile: { image_cli: 'gemini', image_cmd: null }, bins: ['gemini'] });
   assert.match(r.out, /^image-cli: ok gemini$/m);
 });
 
-test('doctor: PAIM_IMAGE_CMD is honoured', () => {
+test('doctor: PAIM_IMAGE_CMD is honoured and reported as a custom command', () => {
   const r = doctor({
     profile: { image_cli: 'gemini' }, bins: ['fake-image'], env: { PAIM_IMAGE_CMD: 'fake-image' },
   });
-  assert.match(r.out, /^image-cli: ok gemini$/m);
+  assert.match(r.out, /^image-cli: ok custom command$/m);
+});
+
+test('doctor: PAIM_IMAGE_CMD under codex is a custom command too', () => {
+  const r = doctor({
+    agent: 'codex', bins: ['fake-image'], env: { PAIM_IMAGE_CMD: 'fake-image' },
+  });
+  assert.match(r.out, /^image-cli: ok custom command$/m);
 });
 
 test('doctor reports onboarding done once the profile is stamped', () => {
