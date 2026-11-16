@@ -148,7 +148,7 @@ Sukhumvit Set มากับ macOS และใช้เมื่อมีอ�
 
 - ชุดทดสอบอัตโนมัติ: Node 291 รายการผ่าน (ข้าม 1 รายการที่ต้องใช้เครือข่ายและ OpenFilm จริง) และ Python 178 รายการผ่าน (ข้าม 2 รายการที่ต้องเลือกเปิดเอง: เรียกโปรแกรมวาดภาพจริง และโมเดลถอดเสียงจริง) ผ่านทั้งหมด ชุดทดสอบไม่เรียกโปรแกรมวาดภาพจริง ไฟล์เสียงที่ใช้ทดสอบทั้งหมดเป็นเสียงสังเคราะห์
 - ผู้ช่วยใหม่ที่ได้รับแค่สกิลนี้ ทำคลิปจากไฟล์เสียงจนจบหนึ่งคลิปได้ รวมขั้นตอนหยุดให้ผู้ใช้ตรวจบท การรันล่าสุดครอบคลุมเสียงเอฟเฟกต์และการส่งต่อไป Studio ด้วย
-- ผู้ช่วยใหม่ทำคลิปจากหัวข้อได้ถึงคลิปร่างและบทสำหรับอ่านออกเสียง การรันนี้เกิดก่อนที่จะมีรูปถ่ายและ Studio
+- ผู้ช่วยใหม่ทำคลิปจากหัวข้อได้ถึงคลิปร่างและบทสำหรับอ่านออกเสียง การรันล่าสุดค้นและดาวน์โหลดรูปจากเว็บจริงสองรูป บันทึกที่มาและสัญญาอนุญาตจากหน้าเว็บ และสร้างไฟล์บอกที่มาของรูป รูปสติกเกอร์ในการรันทั้งสองแบบใช้โปรแกรมวาดภาพจำลอง
 
 **ยังไม่ได้ทดสอบ**
 
@@ -313,7 +313,7 @@ This is version 1. The results below were measured on an Apple-silicon Mac (Appl
 
 - Automated tests: 291 Node tests passed (1 skipped: it needs the network and a real OpenFilm) and 178 Python tests passed (2 skipped, opt-in: a real image-tool call and the real speech model), none failing. The tests never call a real image tool. Every test recording is synthetic audio.
 - A fresh assistant, given only this skill, made a reel from a recording end to end, including the stop where the user checks the script. The latest such run also covered the sound effects and the hand-off to Studio.
-- A fresh assistant made a reel from a topic as far as the draft and the read-aloud sheet. That run was done before web photos and Studio existed.
+- A fresh assistant made a reel from a topic as far as the draft and the read-aloud sheet. The latest such run searched the web and fetched two real photos, recorded each one's source and the licence its page states, and wrote the credits file. In both kinds of run the sticker sprites came from a stand-in drawing tool.
 
 **Not tested**
 
