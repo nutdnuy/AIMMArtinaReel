@@ -76,6 +76,17 @@ else
   echo "font: IBM Plex Sans Thai (fallback)"
 fi
 
+# ---- openfilm (optional: OpenFilm Studio, where P.AIM changes the reel by hand) ---
+# Studio needs Node 22.2 or newer; an older Node only means no hand-edit hand-off, so this is a WARN.
+node_version=""
+[ "$have_node" -eq 1 ] && node_version="$(node -p 'process.versions.node' 2>/dev/null)"
+IFS=. read -r nv_major nv_minor _ <<<"$node_version"
+if [ "${nv_major:-0}" -gt 22 ] 2>/dev/null || { [ "${nv_major:-0}" -eq 22 ] && [ "${nv_minor:-0}" -ge 2 ]; } 2>/dev/null; then
+  echo "openfilm: ok"
+else
+  echo "WARN openfilm (needs Node 22.2 or newer)"
+fi
+
 # ---- profile ----------------------------------------------------------------
 profile_get() {
   [ "$have_node" -eq 1 ] || return 0

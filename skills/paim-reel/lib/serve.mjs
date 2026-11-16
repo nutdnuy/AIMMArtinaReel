@@ -25,7 +25,7 @@ const TYPES = {
 };
 
 // Static file server on 127.0.0.1, port chosen by the system. Resolves to {url, close()}.
-function serveFolder(root) {
+export function serveFolder(root) {
   const base = resolve(root);
   const server = createServer(async (req, res) => {
     try {

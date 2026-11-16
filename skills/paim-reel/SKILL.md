@@ -180,6 +180,11 @@ Send the MP4 and its preview (topic mode: also the read-aloud sheet) and report:
   handle or disclaimer on the end card);
 - that you cannot listen to the mix, so she should play it once before posting.
 
+Then hand the reel over for hand edits (not when `doctor.sh` printed `WARN openfilm`: say so instead):
+`node <skill>/scripts/export_openfilm.mjs <project>`, then `bash <skill>/scripts/open_studio.sh <project>`
+(or the folder the export printed). Tell her the Studio address, what she can change and what not, and
+that a re-export never overwrites her edits: `references/openfilm.md`. Studio's online services stay off.
+
 ## Never
 
 - Logos, brand marks or real people anywhere, sprites included.
