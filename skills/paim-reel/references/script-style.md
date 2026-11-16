@@ -68,26 +68,38 @@ Educational finance content only:
 - Shown numbers get thousands separators (`1,050`) unless the item sets `"group": false` (a
   year, for example).
 
-## Voice mode: turning `script.draft.md` into `script.md`
+## Voice mode: from `script.draft.md` to a confirmed `script.md`
 
 When P.AIM sends a recording without a script, `transcribe.py` writes `script.draft.md`: one
 `lNN:` line per recognised segment, and **no spaces between phrases** (each line is one long
-phrase). Copy it to `script.md` and correct only:
+phrase). The project then moves through three files:
+
+| File | Written by | Means |
+|---|---|---|
+| `script.draft.md` | `transcribe.py` | what the recogniser heard; never timed or shown |
+| `script.proposed.md` | you | your corrected text, waiting for her confirmation |
+| `script.md` | you, after her answer | the script she supplied or confirmed; the only one the tools read |
+
+Write the proposal to `script.proposed.md`, never straight to `script.md`, and correct only:
 
 1. Spelling the recogniser got wrong (finance words, English terms such as `ETF`).
 2. Phrase spaces: split every line into phrases of at most 14 base characters.
-3. Line breaks: join or split lines so each holds one idea, keeping the words in order.
+3. Line breaks: join or split lines so each holds one idea, keeping the words in order. Lines
+   need not match the draft's segments one to one.
+4. Numbers: spell them the way she read them.
 
 Never change, add or remove what was said: the captions must match her voice, and
-`timing.py align` reports any line that drifts (`LOW lNN …`). Spell numbers the way she read
-them. Lines need not match the draft's segments one to one.
+`timing.py align` reports any line that drifts (`LOW lNN …`).
 
 The recogniser often mishears Thai ("บริสัตว์" for "บริษัท"). Fix a word only when the intended
 word is certain from context; otherwise write `[?]` in its place. Never fill a gap from
 `examples/` or from what the topic "should" say: those are not her words. Then stop and show
-P.AIM the whole corrected script, line by line, and ask her to confirm or fix it. She is the
-only one who heard the recording. Run `timing.py align` only after she answers and no `[?]`
-remains.
+P.AIM the whole proposal, line by line, and ask her to confirm or fix it. She is the only one
+who heard the recording. If you come back to a project that has `script.proposed.md` and no
+`script.md`, her answer is still pending: show the proposal again and wait.
+
+After her answer, write `script.md` with her fixes and every `[?]` filled in. `timing.py`
+refuses a script that still holds `[?]` (exit 2, naming the lines).
 
 ## The read-aloud sheet (topic mode)
 

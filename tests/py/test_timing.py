@@ -157,3 +157,25 @@ def test_cli_align_success_line_follows_the_low_lines(tmp_path):
     lines = r.stdout.splitlines()
     assert lines[0].startswith("LOW l02 ")
     assert lines[-1].startswith("aligned 4.3 s, match ") and lines[-1].endswith(" lowest l02 " + lines[0].split()[2])
+
+
+UNRESOLVED = "l01: ETF กับหุ้น ต่างกันยังไง\nl02: กขค [?] งจ\nl03: ฉช ซ[?]ฌ\n"
+
+
+def test_cli_estimate_refuses_unresolved_words(tmp_path):
+    make_project(tmp_path, UNRESOLVED)
+    r = run_cli("estimate", tmp_path)
+    assert r.returncode == 2
+    assert "l02" in r.stderr and "l03" in r.stderr and "l01" not in r.stderr
+    assert "[?]" in r.stderr and "fill" in r.stderr.lower()
+    assert not (tmp_path / "timing.json").exists()
+
+
+def test_cli_align_refuses_unresolved_words(tmp_path):
+    make_project(tmp_path, UNRESOLVED, words=W, duration=4.3)
+    r = run_cli("align", tmp_path)
+    assert r.returncode == 2
+    assert "l02" in r.stderr and "l03" in r.stderr and "l01" not in r.stderr
+    assert "[?]" in r.stderr and "fill" in r.stderr.lower()
+    assert r.stdout == ""
+    assert not (tmp_path / "timing.json").exists()

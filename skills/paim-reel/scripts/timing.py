@@ -17,6 +17,7 @@ from paim_script import ScriptError, base_len, long_tokens, parse_script
 MIN_TOKEN_SEC = 0.04
 MATCH_FAIL = 0.60
 LOW_RATIO = 0.50
+UNRESOLVED = "[?]"   # marks a word nobody has confirmed yet; never timed or shown
 
 
 def _r(x: float) -> float:
@@ -141,6 +142,10 @@ def _load_lines(project: Path):
         lines = parse_script(script.read_text(encoding="utf-8"))
     except ScriptError as e:
         _fail(f"script.md: {e}")
+    unresolved = [l["id"] for l in lines if any(UNRESOLVED in tok for tok in l["tokens"])]
+    if unresolved:
+        _fail(f"script.md still has {UNRESOLVED} in {', '.join(unresolved)}: "
+              f"words the recogniser could not read. Ask the user to fill those words in, then run this again.")
     bad = long_tokens(lines)
     if bad:
         detail = "\n".join(f"  {lid}: {tok} ({base_len(tok)} chars)" for lid, tok in bad)

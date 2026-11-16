@@ -72,20 +72,27 @@ a draft's `script.md` and `story.json` plus a new recording → voice mode, keep
    this machine (the first run downloads a 3 GB speech model: say it takes minutes). Prints
    `N words, M segments, D s`. Exit 2 `no speech recognised`: ask for another take. Exit 1
    `missing …voice.wav`: run 4.1 first.
-3. **If `script.md` already exists** (she read from the sheet): go to 4.4.
-   **If there is no `script.md`**, `transcribe.py` wrote `script.draft.md`, with no spaces
-   between phrases and often misheard Thai. Copy it to `script.md` and correct spelling, add
-   phrase spaces (≤ 14 base characters each), spell numbers the way they are read, and split
-   lines into one idea each. Lines need not match the draft's segments one to one. Never guess
-   a word you cannot read: mark it `[?]` instead.
-   **Then STOP.** You cannot hear the recording. Show P.AIM the corrected `script.md`, line by
-   line, and ask her to confirm it or fix any line. Do not run `timing.py align`, draw sprites
-   or write a story until she answers. Apply her fixes; no `[?]` may remain.
+3. Which script? Look in `<project>`; exactly one of these holds, also when you come back to the
+   project in a later session:
+   - **`script.md` exists** → P.AIM supplied it (she read from the sheet) or confirmed it: go to 4.4.
+   - **`script.proposed.md` exists, `script.md` does not** → her confirmation is still pending.
+     Show her `script.proposed.md` line by line and **STOP**. Do nothing else until she answers.
+   - **Neither** → `transcribe.py` wrote `script.draft.md`: no spaces between phrases, often
+     misheard Thai. Write your corrected text to `<project>/script.proposed.md` (same `lNN:`
+     format; never to `script.md`): fix spelling, add phrase spaces (≤ 14 base characters each),
+     spell numbers the way they are read, split lines into one idea each (lines need not match
+     the draft's segments one to one). Never guess a word you cannot read: write `[?]`.
+     Then **STOP**: you cannot hear the recording. Show her the proposal line by line and ask
+     her to confirm it or fix any line. Do not run `timing.py align`, draw sprites or write a
+     story until she answers.
+   When she answers: apply her fixes and only then write `script.md`, with every `[?]` filled
+   in (`timing.py` exits 2 naming the lines while any `[?]` remains).
 4. `<skill>/.venv/bin/python <skill>/scripts/timing.py align <project>` → `timing.json`;
    prints `aligned 65.7 s, match 0.86, lowest l07 0.75`. Exit 2 `tokens over 14 characters` →
-   split those phrases and run it again. A lowest ratio under 0.75 deserves a second look at that
-   line's wording even on exit 0. Then fact-check every figure she says that will go on screen
-   (same rules as topic mode) and continue at step 6.
+   split those phrases; exit 2 `still has [?]` → ask her for those words; then run it again.
+   **Any `LOW` line → go to step 5**, even though the exit code is 0. No `LOW` line: a lowest
+   ratio under 0.75 deserves a second look at that line's wording; fact-check every figure she
+   says that will go on screen (same rules as topic mode); continue at step 6.
 
 ## 5. When the script and the voice disagree
 
