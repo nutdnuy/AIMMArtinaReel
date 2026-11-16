@@ -216,6 +216,30 @@ for (const [name, mutate, pattern] of REJECTIONS) {
   });
 }
 
+test('two items in one slot are rejected, explicit or defaulted', () => {
+  // explicit vs explicit
+  const both = structuredClone(S);
+  both.scenes[0].items[0].slot = 1;
+  both.scenes[0].items[1].slot = 1;
+  const p1 = problemsOf(both);
+  assert.equal(p1.length, 1, p1.join('\n'));
+  assert.match(p1[0], /slot 1 is used by both "stock" and "etf"/);
+
+  // explicit vs the other item's default slot (item 0 defaults to slot 0)
+  const mixed = structuredClone(S);
+  mixed.scenes[0].items[1].slot = 0;
+  const p2 = problemsOf(mixed);
+  assert.equal(p2.length, 1, p2.join('\n'));
+  assert.match(p2[0], /slot 0 is used by both "stock" and "etf"/);
+
+  // distinct explicit slots (a swap) stay valid
+  const swap = structuredClone(S);
+  swap.scenes[0].items[0].slot = 1;
+  swap.scenes[0].items[1].slot = 0;
+  const r = validateStory(swap, T, brand).scenes[0].items;
+  assert.ok(r[0].rect.y > r[1].rect.y);
+});
+
 test('a story that is not an object is rejected, not crashed on', () => {
   for (const bad of [null, 'x', [], 5]) {
     assert.throws(() => validateStory(bad, T, brand), StoryError);

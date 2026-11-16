@@ -273,11 +273,14 @@ export function validateStory(story, timing, brand, assets = { sprites: [] }) {
       if (slotted.length > CAPACITY[layout]) {
         add(label, `layout ${layout} holds at most ${CAPACITY[layout]} items, got ${slotted.length}`);
       } else {
+        const owner = new Map(); // slot -> id of the item that holds it
         slotted.forEach((b, k) => {
           const s = b.slot ?? k;
           if (Number.isInteger(s) && (s < 0 || s >= slotted.length)) {
             add(b.where, `slot ${s} is outside 0..${slotted.length - 1} (${slotted.length} items in layout ${layout})`);
           } else if (Number.isInteger(s)) {
+            if (owner.has(s)) add(label, `slot ${s} is used by both "${owner.get(s)}" and "${b.out.id}"`);
+            else owner.set(s, b.out.id);
             b.out.rect = slotRect(layout, slotted.length, s);
           }
         });
