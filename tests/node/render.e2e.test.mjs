@@ -40,6 +40,12 @@ function listen(file, filter, window) {
 
 const meanVolume = (file, window) => Number(/mean_volume: (-?[\d.]+) dB/.exec(listen(file, 'volumedetect', window))?.[1]);
 
+// {peak, rms} in dB of the whole of a span of the file's sound, as ffmpeg's astats reports them (3 decimals).
+function levels(file, window) {
+  const overall = listen(file, 'astats', window).split('Overall')[1];
+  return { peak: Number(/Peak level dB: (-?[\d.]+)/.exec(overall)[1]), rms: Number(/RMS level dB: (-?[\d.]+)/.exec(overall)[1]) };
+}
+
 // {lufs, truePeak} over the whole file: the integrated loudness and the true peak that ebur128 reports.
 function loudness(file) {
   const summary = listen(file, 'ebur128=peak=true').split('Summary:')[1];
@@ -47,7 +53,9 @@ function loudness(file) {
 }
 
 // Marks the timing as aligned and gives the project a 3 s synthesised voice at about -14 LUFS (what
-// prep_voice leaves), with a sine of the given peak so that a hot voice can test the limiter.
+// prep_voice leaves), with a sine of the given peak so that a hot voice can test the limiter. The sine fades in
+// and out over 50 ms: speech does not start or stop at full level, and an abrupt sine edge makes the AAC
+// encoder overshoot by about 0.15 dB, which would hide what the limiter does.
 function addLoudVoice(t, dir, { peak = null } = {}) {
   const timing = readJson(join(dir, 'timing.json'));
   timing.estimated = false;
@@ -57,7 +65,7 @@ function addLoudVoice(t, dir, { peak = null } = {}) {
   mkdirSync(join(dir, 'voice'), { recursive: true });
   const measured = Number(/I:\s+(-?[\d.]+) LUFS/.exec(listen(raw, 'ebur128').split('Summary:')[1])[1]);
   const gain = peak === null ? -14 - measured : peak - (-18.06); // the sine is 0.125 of full scale
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-af', `volume=${gain}dB`, '-ar', '48000', '-ac', '1', join(dir, 'voice', 'voice.wav')], { encoding: 'utf8' });
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-af', `volume=${gain}dB,afade=t=in:d=0.05,afade=t=out:st=2.95:d=0.05`, '-ar', '48000', '-ac', '1', join(dir, 'voice', 'voice.wav')], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
 }
 
@@ -197,6 +205,26 @@ test('a hot voice with effects on top is held under -1 dBFS true peak by the lim
   const r = await renderProject(dir);
   const heard = loudness(r.file);
   assert.ok(heard.truePeak <= -1, `true peak ${heard.truePeak} dBFS`);
+});
+
+test('a voice with peaks at -1.2 dBFS (what prep_voice leaves) is not touched by the effects mix', SLOW, async (t) => {
+  const dir = project(t);
+  addLoudVoice(t, dir, { peak: -1.2 });
+  const withEffects = await renderProject(dir);
+  const kept = join(tempDir(t, 'paim-keep'), 'mini-sfx.mp4');
+  copyFileSync(withEffects.file, kept);
+  const story = readJson(join(dir, 'story.json'));
+  story.sfx = false;
+  writeJson(join(dir, 'story.json'), story);
+  const plain = await renderProject(dir);
+  // No effect plays in 0.5-1.0 s (the first pop ends at 0.37 s, the second starts at 1.6 s) or in 2.0-2.9 s.
+  for (const window of [[0.5, 0.5], [2.0, 0.9]]) {
+    const a = levels(kept, window);
+    const b = levels(plain.file, window);
+    assert.ok(Math.abs(a.peak - b.peak) <= 0.1, `window ${window}: peak ${a.peak} dB with effects, ${b.peak} dB without`);
+    assert.ok(Math.abs(a.rms - b.rms) <= 0.1, `window ${window}: RMS ${a.rms} dB with effects, ${b.rms} dB without`);
+  }
+  assert.ok(loudness(kept).truePeak <= -1, `true peak ${loudness(kept).truePeak} dBFS`);
 });
 
 test('a --from/--to render is a silent part', SLOW, async (t) => {

@@ -10,10 +10,12 @@ import { sfxEvents, loadSounds, mixBed, writeFloatWav } from '../lib/sfx.mjs';
 const CRF = 18;
 const PREVIEW_CRF = 26;
 const MUSIC_DB = -30;
-// Ceiling of the limiter on the final mix, and the rate it works at. It runs at 4x the sample rate so that it
-// limits the true (between-samples) peak, and 2 dB under full scale so that AAC encoding, which can add up
-// to about 1 dB on wideband material, still leaves the true peak of the file at or under -1 dBFS.
-const LIMIT_DB = -2;
+// Ceiling of the limiter on the final mix, and the rate it works at. prep_voice.py leaves the voice with peaks
+// up to -1.2 dBFS, so the ceiling is exactly there: a limiter any lower would squash the voice itself, and at
+// this level it leaves the voice alone wherever no effect plays. It runs at 4x the sample rate so that it
+// limits the true (between-samples) peak. AAC encoding adds a little on top (about 0.1 dB on a sine), so the
+// file's true peak stays under -1 dBFS on voice-like material.
+const LIMIT_DB = -1.2;
 const LIMIT_RATE = 192000;
 
 // Runs ffmpeg to completion. Resolves with nothing, rejects with the tail of its log.

@@ -50,7 +50,7 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
   -30 dB under the voice in the final render and faded out over the end card.
 - `sfx` (optional, default `true`): sound effects placed from the story, nothing to write. `false`
   turns them all off (a draft then has no audio at all). They come from `assets/sfx/` and sit under
-  the voice; the sum goes through a limiter at -2 dBFS (true peak). A draft carries the effects
+  the voice; the sum goes through a limiter at -1.2 dBFS (true peak), the level `prep_voice.py` already holds the voice to, so a prepared voice is not changed where no effect plays. A draft carries the effects
   only: no voice, no music. A part render (`--from/--to`) has no audio.
 
   | When | Sound | Level |
