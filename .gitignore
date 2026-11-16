@@ -3,6 +3,7 @@ node_modules/
 __pycache__/
 *.mp4
 *.wav
+!skills/paim-reel/assets/sfx/*.wav
 build/
 renders/
 frames/
