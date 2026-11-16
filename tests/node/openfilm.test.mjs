@@ -431,7 +431,9 @@ function fakeNpx(t, { studio = 'http://127.0.0.1:4747', status = 0, hang = false
   const body = hang
     ? `sleep 307 &\necho $! > "${join(bin, 'child.pid')}"\nwait\n`
     : `echo "project  $4"\necho "Studio   ${studio}"\nexit ${status}\n`;
-  writeFileSync(join(bin, 'npx'), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\n${body}`);
+  // also records whether its stdin is /dev/null (a background process group that reads a terminal is stopped)
+  const stdinNote = `if [ /dev/stdin -ef /dev/null ]; then echo null > "${join(bin, 'stdin.txt')}"; else echo other > "${join(bin, 'stdin.txt')}"; fi\n`;
+  writeFileSync(join(bin, 'npx'), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\n${stdinNote}${body}`);
   chmodSync(join(bin, 'npx'), 0o755);
   const childPid = () => (existsSync(join(bin, 'child.pid')) ? Number(readFileSync(join(bin, 'child.pid'), 'utf8')) : null);
   // whatever the test leaves running is stopped when it ends
@@ -461,6 +463,7 @@ test('open_studio.sh runs `npx -y openfilm@latest open <project>/openfilm` and p
   const r = studio([dir], bin);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(readFileSync(log, 'utf8').trim(), `-y openfilm@latest open ${join(dir, 'openfilm')}`);
+  assert.equal(readFileSync(join(bin, 'stdin.txt'), 'utf8').trim(), 'null', 'npx gets /dev/null as stdin, so a terminal cannot stop it (SIGTTIN)');
   assert.match(r.stdout, /Studio {3}http:\/\/127\.0\.0\.1:4747\?key=abc123/, 'what OpenFilm prints is passed on');
   assert.ok(!/kill|lsof|xargs|pkill/i.test(r.stdout), 'no command that stops a Studio: it may be hers, with other films in it');
   assert.match(r.stdout, /^Studio is hers; never stop or restart it\. She closes it herself\.$/m);
@@ -563,9 +566,13 @@ test('SKILL.md step 9 tells the agent to export finals, open Studio and tell her
   const deliver = text.slice(text.indexOf('## 9. Deliver'), text.indexOf('## Never'));
   assert.match(deliver, /export_openfilm\.mjs/, 'the export belongs to step 9');
   assert.match(deliver, /final reels only.*never a draft/is, 'drafts have no hand-off');
+  assert.match(deliver, /folder (?:that )?(?:the )?export printed/i, 'open the folder the export printed (openfilm-2 after a re-export)');
   assert.match(deliver, /session key/i, 'the address holds a key');
   assert.match(deliver, /once, in the chat only.*never in a file, a note, a log, a commit or the delivery note/is);
   assert.match(text.slice(text.indexOf('## Never')), /Stopping or restarting Studio/, 'Never: touching her Studio');
+  const never = text.slice(text.indexOf('## Never')).split('\n').find((line) => /Stopping or restarting Studio/.test(line));
+  assert.match(never, /using its online services/, 'Never: Studio online services');
+  assert.ok(!/with her voice/i.test(never), 'the rule on Studio online services is unqualified');
   const lines = text.trimEnd().split('\n').length;
   assert.ok(lines < 200, `SKILL.md stays under 200 lines (${lines})`);
   const topic = text.slice(text.indexOf('6. Hand over the draft MP4'), text.indexOf('6. Hand over the draft MP4') + 400);

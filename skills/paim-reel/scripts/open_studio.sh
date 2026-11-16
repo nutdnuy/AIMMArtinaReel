@@ -35,7 +35,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 set -m # the background command gets a process group of its own (its pid is the group's id)
-npx -y openfilm@latest open "$folder" >"$log" 2>&1 &
+npx -y openfilm@latest open "$folder" </dev/null >"$log" 2>&1 &
 pid=$!
 set +m
 waited=0
