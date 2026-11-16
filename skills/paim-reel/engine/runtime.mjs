@@ -387,7 +387,7 @@ function build(R) {
   place(view.captionZone, CAPTION);
   view.caption = el('div', 'caption text', view.captionZone);
   view.endCard = buildEndCard(R.endCard, view.papers.endCard);
-  if (R.estimated) el('div', 'text', el('div', 'draft', stage), 'DRAFT · ยังไม่มีเสียง');
+  if (R.estimated) el('div', 'text', el('div', 'draft', stage), 'DRAFT · ยังไม่มีเสียงพูด');
 }
 
 // ---------- draw: everything below depends on t only

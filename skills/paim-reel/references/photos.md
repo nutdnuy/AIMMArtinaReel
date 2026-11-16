@@ -35,12 +35,20 @@ copyrighted. Search words and fetches go out to the web; nothing from the projec
    - `OK <name> <W>x<H> license=<…>`: done. Exit 2 prints one sentence (not https, not a JPEG,
      PNG or WebP picture, over 15 MB, short side under 600 px, took over 30 s, the server said 404):
      choose another picture. Exit 1: the server could not be reached; try once more or choose another.
+   - `the server answered 429 Too Many Requests, not a picture` (or `403`, another refusal): the
+     site is throttling or refusing automated downloads. Wait at least 20 s and retry once; if it
+     refuses again, take the picture from another source whose page states its licence (a
+     government or museum archive). Never retry in a loop.
 4. **Read every fetched photo** (`<project>/gen/photos/<name>.jpg`) before using it: is it the
    thing the line names, sharp, free of text, a watermark, a logo or a face you should not show?
    Delete a bad one (`rm` the `.jpg`; the entry in `credits.json` then names nothing) and fetch
    another.
 5. Use it in the story as `{"type": "photo", "photo": "<name>", "label": "…", "at": "…"}`
    (`references/story-json.md`).
+
+`fetch_photo.py` runs on macOS or Linux (it locks the credits file with `fcntl`). Its requests say
+`User-Agent: paim-reel/1.0 (open-source video skill; photo fetch)`, which names the tool and nothing
+about her or this machine; `PAIM_USER_AGENT` replaces it.
 
 The script saves the picture as a JPEG at most 1600 px on the long side, with EXIF removed, and
 records `{name, image_url, page_url, license, credit, fetched_at, sha256, width, height}` in

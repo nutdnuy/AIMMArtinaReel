@@ -39,7 +39,7 @@ The Thai sentences below say พี่เอม; say her `display_name` instead 
   | 3. Machine check | `doctor.sh` prints no `MISSING` line except `MISSING image-cli …` |
   | 4. Picture helper | under Codex: always. Under Claude Code: `image_cli` is set, `doctor.sh` prints `image-cli: ok …`, and `<config dir>/test/sample.png` exists |
   | 5. Brand details | `handle`, `audience`, `tone` and `projects_dir` have values (`logo` and `disclaimer` may be empty by her choice) |
-  | 6. First clip | `<projects_dir>/example/renders/etf-vs-stock-draft.mp4` exists |
+  | 6. First clip | `<sample>/renders/etf-vs-stock-draft.mp4` exists, `<sample>` being `<projects_dir>/example` or `<projects_dir>/example-sample` (section 6) |
   | 7. Cheat sheet | `onboarded_at` is set |
 
   On a resume, skip the welcome and say in one sentence where you are going on from:
@@ -125,10 +125,11 @@ Ask, in one message:
 
 If she chooses Google, ask one more question:
 
-> บัญชี Google ที่จะใช้ เป็นบัญชีส่วนตัว เช่น Gmail ทั่วไป หรือเป็นบัญชีที่ทำงานซึ่งบริษัทจ่ายค่า Gemini ให้คะ
+> บัญชี Google ที่จะใช้ เป็นบัญชีส่วนตัว หรือบัญชีของที่ทำงานคะ ถ้าไม่แน่ใจ ตอบว่าไม่แน่ใจได้เลยค่ะ
 
-Personal, or she is not sure → Antigravity CLI. Work account that pays for Gemini, or she says
-she already has a Gemini API key → Gemini CLI.
+Personal, or she is not sure → Antigravity CLI. Work account, or she says she already has a
+Gemini API key → Gemini CLI. If the test drawing then says Google no longer accepts this client
+(her organisation does not pay for Gemini Code Assist), offer the Antigravity route as below.
 
 ### Install
 
@@ -236,33 +237,55 @@ Then one question per message, in this order, saving each answer before the next
 Make the bundled example with her settings, so she sees a clip before she records anything. No
 pictures are drawn: the example brings its own.
 
-> ต่อไปจะลองทำคลิปตัวอย่างให้ดูหนึ่งคลิปนะคะ อาจใช้เวลาสิบกว่านาที ระหว่างนี้พักก่อนได้เลยค่ะ
+> ต่อไปจะลองทำคลิปตัวอย่างให้ดูหนึ่งคลิปนะคะ อาจใช้เวลาไม่กี่นาทีไปจนถึงสิบกว่านาที ระหว่างนี้พักก่อนได้เลยค่ะ
 
-(The render prints nothing while it works; on the test Mac this 36 s example took about 15 minutes.
-Run it in the background if your tools allow, and wait for it.)
+(The render prints nothing while it works; on the test Mac this 36 s example took from about one
+minute to about 15 minutes, depending on what else the Mac was doing. Run it in the background if
+your tools allow, and wait for it.)
 
-`<projects_dir>` is `profile.mjs get projects_dir`. If `<projects_dir>/example` is already there,
-remove it first (it holds only this sample). Then:
+`<projects_dir>` is `profile.mjs get projects_dir`. The sample goes to `<sample>`, which is
+`<projects_dir>/example` unless that folder holds something of hers:
+
+- `<projects_dir>/example` does not exist → `<sample>` is that folder.
+- It exists and its `story.json` has `"slug": "etf-vs-stock"` → it is this sample from an
+  earlier try: remove it, and `<sample>` is that folder.
+- It exists and is anything else (no `story.json`, or another slug) → it is hers: leave it
+  untouched, and `<sample>` is `<projects_dir>/example-sample`, under the same two rules. If
+  `example-sample` is also something else, ask her where the sample may go.
+
+Then:
 
 ```
-cp -R <skill>/examples/etf-vs-stock <projects_dir>/example
-<skill>/.venv/bin/python <skill>/scripts/timing.py estimate <projects_dir>/example
-node <skill>/scripts/build.mjs <projects_dir>/example
-node <skill>/scripts/render.mjs <projects_dir>/example --preview
+cp -R <skill>/examples/etf-vs-stock <sample>
+<skill>/.venv/bin/python <skill>/scripts/timing.py estimate <sample>
+node <skill>/scripts/build.mjs <sample>
+node <skill>/scripts/render.mjs <sample> --preview
 ```
 
 `render.mjs` prints `N frames -> …` and `preview -> …`: the draft is
-`<projects_dir>/example/renders/etf-vs-stock-draft.mp4` and its preview
-`etf-vs-stock-draft-preview.mp4`. Send her the preview:
+`<sample>/renders/etf-vs-stock-draft.mp4` and its preview `etf-vs-stock-draft-preview.mp4`.
+Send her the preview:
 
-> นี่คือคลิปตัวอย่างค่ะ คลิปนี้ยังไม่มีเสียงพี่เอม มีแค่เสียงเอฟเฟกต์เบา ๆ เพราะยังไม่ได้อัดเสียงค่ะ ท้ายคลิปจะเห็นชื่อช่องที่เพิ่งตั้งไว้ คลิปจริงจะมีเสียงพี่เอมและคำบรรยายตรงกับเสียงค่ะ
+> นี่คือคลิปตัวอย่างค่ะ คลิปนี้ยังไม่มีเสียงพี่เอม มีแค่เสียงเอฟเฟกต์เบา ๆ เพราะยังไม่ได้อัดเสียงค่ะ ฉากตะกร้าเป็นรูปถ่ายจริงที่เจ้าของรูปให้ทุกคนใช้ได้ฟรี ท้ายคลิปจะเห็นชื่อช่องที่เพิ่งตั้งไว้ คลิปจริงจะมีเสียงพี่เอมและคำบรรยายตรงกับเสียงค่ะ
 
 If a command exits non-zero, run `doctor.sh` again and fix what it reports (section 3); do not
 go on until the draft exists.
 
 ## 7. Recording guide and cheat sheet
 
-Send her the text of `references/cheatsheet-th.md` as it is, and tell her she can keep it:
+First tell her, in one message, what comes with every clip (pictures from the web, and Studio):
+
+> ก่อนจบ ขอเล่าสามเรื่องที่ควรรู้นะคะ
+> เรื่องแรก ทุกคลิปมีเสียงเอฟเฟกต์เบา ๆ ตอนภาพขึ้นและตอนเปลี่ยนฉาก เสียงพี่เอมจะดังกว่าเสมอค่ะ
+> เรื่องที่สอง ของจริงที่มีชื่อเรียก เช่น ตึก ธนบัตร หรือสถานที่ ผู้ช่วยจะค้นรูปถ่ายจากเว็บมาใส่ให้ รูปบนเว็บส่วนใหญ่มีเจ้าของค่ะ
+> รูปไหนที่ไม่รู้ว่าเจ้าของให้สิทธิ์ใช้หรือไม่ อาจติดลิขสิทธิ์ได้ ผู้ช่วยจะแจ้งรูปเหล่านั้นทุกครั้ง จะใช้ต่อหรือไม่ พี่เอมเป็นคนตัดสินใจค่ะ
+> คลิปที่มีรูปจากเว็บ จะมีไฟล์รายชื่อที่มาของรูปแนบไปด้วยทุกครั้งค่ะ
+> เรื่องที่สาม คลิปที่มีเสียงพี่เอมแล้ว เปิดแก้เองได้ในโปรแกรม OpenFilm Studio ซึ่งเป็นโปรแกรมแก้คลิปที่เปิดในหน้าเว็บบนเครื่องนี้ค่ะ คลิปร่างยังเปิดแก้ไม่ได้นะคะ
+> ครั้งแรกที่เปิด เครื่องต้องดาวน์โหลดประมาณ 100 MB ผู้ช่วยจะถามพี่เอมก่อนค่ะ
+> โปรแกรมแก้คลิปเป็นของพี่เอม ผู้ช่วยจะไม่ปิดให้ แก้เสร็จแล้วพี่เอมปิดเองได้เลยค่ะ
+> คลิปที่แก้เองแล้ว ให้ส่งออกจากโปรแกรมแก้คลิปนั้นเลย ไฟล์ที่ผู้ช่วยทำไว้จะไม่เปลี่ยนตามค่ะ
+
+Then send her the text of `references/cheatsheet-th.md` as it is, and tell her she can keep it:
 
 > นี่คือคู่มือย่อค่ะ มีวิธีสั่งทำคลิปและวิธีอัดเสียง เก็บไว้ดูได้เลยนะคะ
 

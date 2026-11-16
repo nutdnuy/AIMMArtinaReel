@@ -70,6 +70,10 @@ Educational finance content only:
 
 ## Voice mode: from `script.draft.md` to a confirmed `script.md`
 
+Every recording first goes through `prep_voice.py`, which writes `voice/voice.wav`: mono 48 kHz,
+a 0.25 s lead-in, pauses over 0.45 s cut to 0.45 s, the end trimmed to 0.15 s, -14 LUFS. Then
+`transcribe.py` turns it into words on this machine (`voice/words.json`).
+
 When P.AIM sends a recording without a script, `transcribe.py` writes `script.draft.md`: one
 `lNN:` line per recognised segment, and **no spaces between phrases** (each line is one long
 phrase). The project then moves through three files:

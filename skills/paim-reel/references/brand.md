@@ -68,7 +68,7 @@ Every text element uses `"Sukhumvit Set", "IBM Plex Sans Thai", sans-serif`, lin
 | number item | 140 px / 700 | one line, thousands separators; counts up over 0.8 s; shrinks to 56 px to fit, else `clipped` |
 | end card "ติดตาม" | 120 px / 700 | cream on green |
 | end-card handle, disclaimer | 40 px / 400 | shown when the profile sets them |
-| draft banner | 40 px / 700 | `DRAFT · ยังไม่มีเสียง`, on every frame of an estimated-timing render |
+| draft banner | 40 px / 700 | `DRAFT · ยังไม่มีเสียงพูด` (a draft has effects but no voice yet), on every frame of an estimated-timing render |
 
 Fonts: Sukhumvit Set ships with macOS and is used when present. It is not redistributable: the
 skill never contains or copies its files. Elsewhere the engine loads IBM Plex Sans Thai (OFL-1.1,
@@ -96,9 +96,13 @@ Reel length = voice length + a 2.0 s green end card.
   (a green key would remove brand green). `gen_sprites.py` flags `OFF-PALETTE` when under 80% of a
   sprite's pixels are near the palette.
 - Icons are Phosphor (MIT), weights `fill` and `duotone`, in a brand colour.
+- Photos are real pictures from the web on a torn cream paper card, desaturated with a warm tint by
+  default (`photos.md`).
 
 ## Never
 
 - No third-party logos, brand marks, mascots or real people: not in sprites, icons, labels or
   captions. Phosphor names ending in `-logo` are refused. Describe sprites as generic objects
   ("an office building", not a company's tower).
+- Photos follow `photos.md`: no private people, no watermark, and a company's logo only when the
+  line names that company.

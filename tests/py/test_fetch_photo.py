@@ -107,7 +107,7 @@ def project(tmp_path):
 
 
 def run(project, *args, env=None, local=True):
-    e = {k: v for k, v in os.environ.items() if k != "PAIM_ALLOW_HTTP_LOCAL"}
+    e = {k: v for k, v in os.environ.items() if k not in ("PAIM_ALLOW_HTTP_LOCAL", "PAIM_USER_AGENT")}
     e["NO_PROXY"] = "127.0.0.1"
     e["no_proxy"] = "127.0.0.1"
     if local:
@@ -148,12 +148,20 @@ def test_jpeg_is_fetched_recoded_and_recorded(project, site):
     assert entry["fetched_at"].endswith("+00:00") and entry["fetched_at"].startswith("20")
 
 
-def test_the_request_carries_only_a_generic_user_agent(project, site):
+def test_the_request_carries_only_a_descriptive_user_agent_with_nothing_personal(project, site):
     url = site.put("/a.jpg", encode(picture(), "JPEG"))
     assert fetch(project, "bank", url).returncode == 0
     [(_, headers)] = site.hits
-    assert headers["User-Agent"] == "paim-reel/1.0"
+    # Wikimedia throttles a bare client name; this one says what the client is, and nothing about who runs it.
+    assert headers["User-Agent"] == "paim-reel/1.0 (open-source video skill; photo fetch)"
     assert not {"Cookie", "Referer", "Authorization", "From"} & set(headers)
+
+
+def test_paim_user_agent_replaces_the_user_agent(project, site):
+    url = site.put("/a.jpg", encode(picture(), "JPEG"))
+    assert fetch(project, "bank", url, env={"PAIM_USER_AGENT": "my-client/2.0 (test)"}).returncode == 0
+    [(_, headers)] = site.hits
+    assert headers["User-Agent"] == "my-client/2.0 (test)"
 
 
 def test_license_and_credit_are_stored(project, site):

@@ -16,6 +16,9 @@ anything but https://; an https:// host that is a loopback, private, link-local 
 whose bytes do not decode as one of those (an SVG never does); more than 15 MB; a short side under 600 px;
 a download that takes longer than 30 s (PAIM_FETCH_TIMEOUT sets another number of seconds, for tests).
 Exit 1: the server could not be reached.
+
+Requests carry the User-Agent "paim-reel/1.0 (open-source video skill; photo fetch)"; PAIM_USER_AGENT replaces it.
+Needs macOS or Linux (the credits record is locked with fcntl).
 """
 import argparse
 import fcntl
@@ -42,7 +45,8 @@ from PIL import Image, ImageOps
 from credits import CreditsError, credits_file, load_entries
 
 NAME_RE = re.compile(r"[a-z0-9-]+")
-USER_AGENT = "paim-reel/1.0"
+# Says what the client is (Wikimedia throttles a bare name) and nothing about who runs it or on what machine.
+USER_AGENT = "paim-reel/1.0 (open-source video skill; photo fetch)"
 ACCEPT = "image/jpeg, image/png, image/webp"
 TYPES = ("image/jpeg", "image/png", "image/webp")
 FORMATS = ("JPEG", "PNG", "WEBP")
@@ -71,6 +75,10 @@ def timeout() -> float:
         return float(os.environ.get("PAIM_FETCH_TIMEOUT", "30"))
     except ValueError:
         return 30.0
+
+
+def user_agent() -> str:
+    return os.environ.get("PAIM_USER_AGENT", "").strip() or USER_AGENT
 
 
 def non_public(address: str) -> bool:
@@ -163,7 +171,7 @@ def read_capped(resp) -> bytes:
 def get(url: str) -> bytes:
     # Non-ASCII characters in the path are percent-encoded; characters a URL already uses are left as they are.
     ascii_url = urllib.parse.quote(url, safe="%/:?&=#+@!$'()*,;~[]")
-    request = urllib.request.Request(ascii_url, headers={"User-Agent": USER_AGENT, "Accept": ACCEPT})
+    request = urllib.request.Request(ascii_url, headers={"User-Agent": user_agent(), "Accept": ACCEPT})
     try:
         with urllib.request.build_opener(HttpsOnly, PublicHTTPSHandler).open(request, timeout=timeout()) as resp:
             kind = resp.headers.get_content_type()

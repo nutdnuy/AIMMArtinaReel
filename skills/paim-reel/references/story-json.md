@@ -50,8 +50,11 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
   -30 dB under the voice in the final render and faded out over the end card.
 - `sfx` (optional, default `true`): sound effects placed from the story, nothing to write. `false`
   turns them all off (a draft then has no audio at all). They come from `assets/sfx/` and sit under
-  the voice; the sum goes through a limiter at -1.2 dBFS (true peak), the level `prep_voice.py` already holds the voice to, so a prepared voice is not changed where no effect plays. A draft carries the effects
-  only: no voice, no music. A part render (`--from/--to`) has no audio.
+  the voice; the sum goes through a limiter at -1.2 dBFS (true peak), the level `prep_voice.py`
+  already holds the voice to, so a prepared voice is not changed where no effect plays. The
+  limiter sits at -1.2 dBFS before AAC encoding: with a prepared voice the file measured under
+  -1 dBFS, but on wideband material such as music its true peak can end slightly higher. A draft
+  carries the effects only: no voice, no music. A part render (`--from/--to`) has no audio.
 
   | When | Sound | Level |
   |---|---|---|
@@ -62,8 +65,9 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
   | a `number` counts (0.2, 0.45, 0.7 s after it appears, besides its entrance) | 3 x `tick` | -22 dB |
   | the end card starts | `chime` | -16 dB |
 
-  A sound is dropped when the same sound played less than 0.12 s before, and at most 60 effects
-  are placed (the earliest). Levels are relative to the files, whose peak is -3 dBFS.
+  A sound is dropped when it would start less than 0.12 s after the last kept sound of the same
+  name, and at most 60 effects are placed (the earliest). Levels are relative to the files, whose
+  peak is -3 dBFS.
 
 ## Layouts (canvas px; CONTENT is x 90–990, y 440–1160)
 
@@ -193,13 +197,14 @@ l02: ETF คือ ตะกร้าหุ้น
 
 Resolved: one scene 0–3.0 s; `stock` pops into the top slot at 0.25 s, `etf` into the bottom
 slot at 1.60 s; five captions, the last (`ตะกร้าหุ้น`) highlighted; end card 3.0–5.0 s. The full
-reel in `examples/etf-vs-stock/` uses every layout but `stack` and `grid`, sprites, icons, a pill,
-a sourced number and all three marks.
+reel in `examples/etf-vs-stock/` uses every layout but `stack` and `grid`, sprites, icons, one
+CC0 photo (with its `credits.json`), a pill, a sourced number and all three marks.
 
 ## `check.mjs` findings and their usual fix
 
 To look at the result, `still.mjs <project> --scenes <out.png>` takes one frame per scene once
-its last entrance, count-up and mark have finished.
+its last entrance, count-up and mark have finished. A still taken at any other time can catch a counter
+mid-count or miss late items.
 
 `check.mjs` builds the project, opens it, and measures every text box at settled moments (after
 each entrance; an item with an idle loop is judged over the loop's whole reach). It prints

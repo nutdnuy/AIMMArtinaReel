@@ -21,6 +21,10 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
 - Needs Node 22.2 or newer (`doctor.sh` prints `openfilm: ok` or `WARN openfilm (needs Node 22.2 or
   newer)`; on a WARN skip the hand-off and say so) and, the first time, a download of the OpenFilm
   package and a headless Chromium (about 100 MB) through `npx -y openfilm@latest`.
+- Before the first opening, ask her: say it downloads about 100 MB and takes a few minutes, and wait
+  for her yes. It is the first opening when
+  `ls -d "$(npm config get cache)"/_npx/*/node_modules/openfilm` finds nothing (npx keeps the package
+  there once it has downloaded it). When she says no, the MP4 is still the finished reel.
 - `open_studio.sh` prints Studio's address and returns at once; Studio keeps running in the background
   on this computer (127.0.0.1). It may be a Studio she already has open with other films in it, so:
   Studio is hers; never stop or restart it. She closes it herself. (A command that stalls is stopped,
@@ -41,8 +45,8 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
   the end card; the fade is on its last piece).
 - `scene-01.html` ... `endcard.html`: one page per scene. Each is our own `engine/` and `data.js`
   with a thin wrapper: `frame(t)` draws the reel at (scene start + t). There is no second drawing
-  code, so the picture is the render's picture: our test compares the page at `frame(0.5)` with our
-  page at the scene start + 0.5 s and the two screenshots are byte for byte the same. OpenFilm's own
+  code, so the picture is the render's picture: the tests compare the page at `frame(0.5)` with our
+  page at the scene start + 0.5 s, and the two screenshots show the same picture. OpenFilm's own
   `look` of the same time differs from our render by a mean of 0.1 of 255 per pixel (it re-encodes
   the frame), nothing you can see.
 - `assets/` (sprites, photos, fonts, logo, music, `voice.wav`, `sfx/`), `engine/`, `data.js`,
@@ -68,26 +72,29 @@ Every change is written to `film.html` in `openfilm/` a moment after she makes i
 - Pictures inside a scene: click a sprite, icon or photo and move, resize or rotate it (moving a
   sprite 210 px was saved as a translate of `[210,0]`), or crop and fit it.
 - Fades, motion, adjust and effects tabs exist on a picture clip; `Advanced` lists the changes
-  inside the page and has `Replace` for the page file. I only looked at these tabs.
+  inside the page and has `Replace` for the page file. These tabs were only opened, not tried.
 
 ## What to tell her, plainly
 
 - Our scene logic does not run on her edit. Studio applies a change after the page has drawn its
   frame, so a headline she retypes is not shrunk to fit and a picture she moves does not make the
-  arrows or rings follow it. That follows from how OpenFilm applies changes (its SPEC); I did not
-  try a long text or a marked picture. She should look at the result.
-- Cutting or reordering picture clips does not cut the voice. In the cut I made, the voice clip kept
+  arrows or rings follow it. That follows from how OpenFilm applies changes (its SPEC); a long text
+  and a marked picture were not tried. She should look at the result.
+- Cutting or reordering picture clips does not cut the voice. In the cut that was tried, the voice clip kept
   its place (and sound clips starting after the cut moved up, the voice, running across it, did
   not), so the picture and her voice drift apart unless she cuts the voice at the same spot. Whether
   effect clips follow a reorder is not checked.
 - Studio mixes the clips as they stand. Our render's limiter and loudness measurement are not in
   it: the final MP4 she exports from Studio is not the loudness-checked file the skill delivered.
-  OpenFilm's `render --loudness=-14` exists (its help says so); I did not run it on a reel.
-- Studio never changes `story.json`, `timing.json` or our MP4. Her edits live only in `openfilm/`.
+  OpenFilm's `render --loudness=-14` exists (its help says so); it was not run on a reel.
+- Studio never changes `story.json`, `timing.json` or our MP4. Her edits live only in `openfilm/`,
+  so a clip she changes by hand is exported from Studio itself: `render.mjs` does not pick up her
+  edits, and the MP4 the skill delivered stays as it was. Studio's own Export button is not checked
+  (below): point her to it, but do not describe its steps.
 
 ## Not checked
 
-- Trimming by dragging a clip's edge (my automated drag did not move the edge; splitting and
+- Trimming by dragging a clip's edge (an automated drag did not move the edge; splitting and
   deleting did work), the Export button inside Studio (the command `openfilm render` does render the
   export; a 2 s range gave a 1080×1920, 30 fps H.264 + AAC file), undo, hiding or muting a track,
   adding her own pictures or music, captions made in Studio, and the Motion and Effects tabs.

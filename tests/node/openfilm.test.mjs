@@ -563,19 +563,22 @@ test('SKILL.md step 9 tells the agent to export finals, open Studio and tell her
     assert.ok(text.includes(mention), `SKILL.md mentions ${mention}`);
     assert.ok(existsSync(join(SKILL, mention)), `${mention} exists`);
   }
-  const deliver = text.slice(text.indexOf('## 9. Deliver'), text.indexOf('## Never'));
+  const deliver = text.slice(text.indexOf('## 9. Deliver'), text.indexOf('## Never')).replace(/\s+/g, ' ');
   assert.match(deliver, /export_openfilm\.mjs/, 'the export belongs to step 9');
-  assert.match(deliver, /final reels only.*never a draft/is, 'drafts have no hand-off');
-  assert.match(deliver, /folder (?:that )?(?:the )?export printed/i, 'open the folder the export printed (openfilm-2 after a re-export)');
-  assert.match(deliver, /session key/i, 'the address holds a key');
-  assert.match(deliver, /once, in the chat only.*never in a file, a note, a log, a commit or the delivery note/is);
-  assert.match(text.slice(text.indexOf('## Never')), /Stopping or restarting Studio/, 'Never: touching her Studio');
-  const never = text.slice(text.indexOf('## Never')).split('\n').find((line) => /Stopping or restarting Studio/.test(line));
-  assert.match(never, /using its online services/, 'Never: Studio online services');
-  assert.ok(!/with her voice/i.test(never), 'the rule on Studio online services is unqualified');
+  assert.match(deliver, /for a final only \(never a draft/i, 'drafts have no hand-off');
+  assert.match(deliver, /open_studio\.sh <folder>` with the folder it printed/, 'open the folder the export printed (openfilm-2 after a re-export)');
+  // the Studio rules stand once, in "Three rules that always hold", before step 0
+  const rules = text.slice(text.indexOf('## Three rules'), text.indexOf('## 0.')).replace(/\s+/g, ' ');
+  assert.match(rules, /No OpenFilm hand-off for a draft/);
+  assert.match(rules, /session key/i, 'the address holds a key');
+  assert.match(rules, /once, in the chat, and write it nowhere \(no file, note, log, commit message or delivery note\)/);
+  assert.match(rules, /never stop or restart Studio or use its online services/, 'touching her Studio, and its online services');
+  assert.ok(!/with her voice/i.test(rules), 'the rule on Studio online services is unqualified');
   const lines = text.trimEnd().split('\n').length;
-  assert.ok(lines < 200, `SKILL.md stays under 200 lines (${lines})`);
-  const topic = text.slice(text.indexOf('6. Hand over the draft MP4'), text.indexOf('6. Hand over the draft MP4') + 400);
+  assert.ok(lines <= 185, `SKILL.md stays at 185 lines or fewer (${lines})`);
+  const start = text.indexOf('5. Write `<project>/read-aloud.md`');
+  assert.ok(start > 0, 'topic mode hands over the draft in its step 5');
+  const topic = text.slice(start, text.indexOf('## 4. Voice mode'));
   assert.ok(!/Studio|OpenFilm/i.test(topic), 'the topic-mode draft path does not mention Studio');
 
   const ref = readFileSync(join(SKILL, 'references', 'openfilm.md'), 'utf8');

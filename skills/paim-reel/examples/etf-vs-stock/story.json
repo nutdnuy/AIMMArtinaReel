@@ -34,7 +34,7 @@
     {
       "id": "basket", "from": "l05", "layout": "row", "headline": {"text": "ETF = ตะกร้าหุ้น", "at": "l05@1"},
       "items": [
-        {"id": "etf", "type": "sprite", "sprite": "basket", "label": "หลายตัว", "at": "l05@3", "idle": "bob"},
+        {"id": "etf", "type": "photo", "photo": "woven-basket", "label": "ตะกร้าหุ้น", "at": "l05@3"},
         {"id": "once", "type": "pill", "text": "ครบทั้งตะกร้า", "bg": "green", "at": "l06@2", "enter": "rise"}
       ],
       "marks": [

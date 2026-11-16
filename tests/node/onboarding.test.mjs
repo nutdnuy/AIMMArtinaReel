@@ -103,3 +103,40 @@ test('SKILL.md routes step 0 to onboarding and its description says ตั้ง
   assert.ok(step0.includes('references/onboarding.md'), 'step 0 points to references/onboarding.md');
   assert.ok(!/re-run setup/i.test(skill), 'no "re-run setup" left');
 });
+
+test('onboarding tells her about effects, web photos, unknown licences and Studio, in Thai', () => {
+  // what section 7 tells her before the cheat sheet
+  const thai = section(onboarding(), 7).split('\n').filter((l) => l.startsWith('> ')).join('\n');
+  assert.match(thai, /เสียงเอฟเฟกต์/, 'clips have sound effects');
+  assert.match(thai, /รูปถ่าย[^\n]*เว็บ/, 'real things are shown with photos from the web');
+  assert.match(thai, /ไม่รู้[^\n]*สิทธิ์[^\n]*ลิขสิทธิ์[^\n]*(ตัดสินใจ|การตัดสินใจ)/, 'an unknown-licence photo may be copyrighted and is her decision');
+  assert.match(thai, /รายชื่อที่มาของรูป|ที่มาของรูป/, 'a credits file comes with the clip');
+  assert.match(thai, /100 MB/, 'the first Studio opening downloads about 100 MB');
+  assert.match(thai, /ปิด[^\n]*เอง/, 'Studio is hers to close');
+  assert.match(thai, /แก้เอง[^\n]*ส่งออก/, 'a clip changed by hand is exported from Studio');
+  assert.doesNotMatch(thai, /\bCLI\b/, 'no "CLI" in what she reads');
+  assert.ok((thai.match(/Studio/g) ?? []).length <= 1, 'Studio is named once, then in plain Thai');
+});
+
+test('the Google-account question has no jargon, and the sample folder is only removed when it is the sample', () => {
+  const text = onboarding();
+  assert.ok(text.includes('บัญชีส่วนตัว หรือบัญชีของที่ทำงาน'), 'plain question about her Google account');
+  assert.doesNotMatch(section(text, 4), /จ่ายค่า Gemini/, 'no product jargon in the question');
+  const first = section(text, 6);
+  assert.match(first, /"slug"|slug/, 'checks the slug before removing');
+  assert.ok(first.includes('etf-vs-stock'), 'names the sample slug');
+  assert.ok(first.includes('example-sample'), 'falls back to example-sample');
+  const table = section(text, 1);
+  assert.ok(table.includes('example-sample'), 'the resume table accepts example-sample too');
+});
+
+test('cheat sheet: change a picture, open for hand edits, the Studio export and the unknown-licence note', () => {
+  const text = cheatsheet();
+  assert.ok(text.includes('"ขอเปลี่ยนรูป'), 'has "ขอเปลี่ยนรูป"');
+  assert.ok(text.includes('"เปิดให้แก้เอง"'), 'has "เปิดให้แก้เอง"');
+  assert.match(text, /แก้เอง[^\n]*ส่งออก/, 'a clip changed by hand is exported from the editor');
+  assert.match(text, /100 MB/, 'the first opening downloads about 100 MB');
+  assert.match(text, /ไม่รู้[^\n]*สิทธิ์[^\n]*ลิขสิทธิ์/, 'unknown-licence photos may be copyrighted');
+  assert.match(text, /ค้น[^\n]*รูป[^\n]*เว็บ|รูป[^\n]*ค้น[^\n]*เว็บ/, 'photo searches go to the web');
+  assert.ok((text.match(/Studio/g) ?? []).length <= 1, 'the editor is named once, then in plain Thai');
+});

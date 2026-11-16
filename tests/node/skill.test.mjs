@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, existsSync, statSync, cpSync } from 'node:fs
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { checkProject } from '../../skills/paim-reel/scripts/check.mjs';
 import { tempDir } from '../helpers.mjs';
@@ -55,10 +56,87 @@ test('SKILL.md frontmatter: name, and a description that names both entry points
   }
 });
 
-test('SKILL.md body is at most 200 lines', () => {
-  const { body } = frontmatter(skillText());
-  const lines = body.trimEnd().split('\n').length;
-  assert.ok(lines <= 200, `body has ${lines} lines`);
+test('SKILL.md is at most 185 lines, frontmatter included', () => {
+  const lines = skillText().trimEnd().split('\n').length;
+  assert.ok(lines <= 185, `SKILL.md has ${lines} lines`);
+});
+
+// The SKILL.md section that starts with `heading` (a "## …" line), up to the next "## " heading.
+const skillSection = (heading) => {
+  const text = skillText();
+  const start = text.indexOf(`\n## ${heading}`);
+  assert.ok(start >= 0, `SKILL.md has a "## ${heading}" section`);
+  const next = text.indexOf('\n## ', start + 1);
+  return text.slice(start, next < 0 ? undefined : next);
+};
+
+test('SKILL.md states its three hard rules in one place, near the top', () => {
+  const text = skillText();
+  const rules = skillSection('Three rules');
+  assert.ok(text.indexOf('\n## Three rules') < text.indexOf('\n## 0.'), 'the rules come before step 0');
+  // a rule's words, with its line breaks and indentation read as single spaces
+  const numbered = rules.split(/\n(?=\d\. )/).slice(1).map((r) => r.replace(/\s+/g, ' '));
+  assert.equal(numbered.length, 3, 'three numbered rules');
+  const [voice, figures, studio] = numbered;
+  // (a) voice mode with no script
+  assert.match(voice, /script\.proposed\.md/);
+  assert.match(voice, /\*\*stop\*\*/i);
+  assert.match(voice, /confirm/);
+  assert.match(voice, /`examples\/`[^.]*never a source/);
+  // (b) figures and photo licences
+  assert.match(figures, /every number on screen has a `source`/i);
+  assert.match(figures, /licence is `unknown`/);
+  assert.match(figures, /may be copyrighted and are used at her decision/);
+  // (c) Studio
+  assert.match(studio, /[Nn]ever stop or restart Studio/);
+  assert.match(studio, /[Nn]o OpenFilm hand-off for a draft/);
+  assert.match(studio, /address[^.]*once, in the chat, and write it nowhere/);
+});
+
+test('SKILL.md "Never" agrees with photos.md on logos and says what stays on this machine', () => {
+  const never = skillSection('Never').replace(/\n {2}/g, ' ');
+  const logos = never.split('\n- ').find((b) => /[Ll]ogos/.test(b));
+  assert.ok(logos.includes('references/photos.md'), 'the logo rule points to photos.md for photos');
+  const privacy = never.split('\n- ').find((b) => /stay on this machine/.test(b));
+  assert.ok(privacy, 'a bullet says what stays on this machine');
+  assert.match(privacy, /voice file and the speech-to-text stay on this machine/);
+  assert.match(privacy, /read the script and transcript text in this chat/);
+  assert.match(privacy, /photo searches go to the web/);
+});
+
+test('SKILL.md routes her change requests and the Studio hand-off', () => {
+  const text = skillText();
+  for (const phrase of ['ขอเปลี่ยนรูป', 'เปิดให้แก้เอง']) assert.ok(text.includes(phrase), `SKILL.md handles "${phrase}"`);
+  assert.match(text, /100 MB/, 'SKILL.md says the first Studio opening downloads about 100 MB');
+});
+
+test('the draft banner says the voice is missing, not all sound, in the engine and in brand.md', () => {
+  const runtime = readFileSync(join(SKILL, 'engine', 'runtime.mjs'), 'utf8');
+  const brand = readFileSync(join(SKILL, 'references', 'brand.md'), 'utf8');
+  for (const [name, text] of [['runtime.mjs', runtime], ['brand.md', brand]]) {
+    assert.ok(text.includes('DRAFT · ยังไม่มีเสียงพูด'), `${name} has the new banner`);
+    assert.ok(!/DRAFT · ยังไม่มีเสียง(?!พูด)/.test(text), `${name} has no old banner`);
+  }
+});
+
+test('the references say what to do on a refused fetch, how loud a file can end, and speak impersonally', () => {
+  const photos = readFileSync(join(SKILL, 'references', 'photos.md'), 'utf8');
+  assert.match(photos, /429/);
+  assert.match(photos, /wait[^.]*retry once/i);
+  assert.match(photos, /macOS or Linux/);
+  assert.match(photos, /PAIM_USER_AGENT/);
+  const story = readFileSync(join(SKILL, 'references', 'story-json.md'), 'utf8');
+  const prose = story.replace(/\s+/g, ' ');
+  assert.match(prose, /last kept sound of the same name/);
+  assert.match(prose, /-1\.2 dBFS before AAC/);
+  assert.match(prose, /true peak can end slightly higher/);
+  for (const line of story.split('\n').filter((l) => /dBFS/.test(l) && !l.startsWith('|'))) {
+    assert.ok(line.length <= 110, `story-json.md: the loudness lines are wrapped: ${line.slice(0, 60)}`);
+  }
+  const openfilm = readFileSync(join(SKILL, 'references', 'openfilm.md'), 'utf8');
+  assert.doesNotMatch(openfilm, /\bI\b|\b[Mm]y\b/, 'openfilm.md has no first person');
+  assert.doesNotMatch(openfilm, /byte for byte/);
+  assert.match(openfilm, /the same picture/);
 });
 
 test('every scripts/ and references/ path SKILL.md mentions exists', () => {
@@ -114,8 +192,29 @@ test('the example estimates, builds and passes check.mjs with zero findings', SL
   const { resolved } = await buildProject(project);
   assert.equal(resolved.slug, story().slug);
   const c = await checkProject(project);
-  assert.deepEqual([c.text, c.deadBeats, c.overlaps], [[], [], []]);
+  assert.deepEqual([c.text, c.deadBeats, c.overlaps, c.credits], [[], [], [], []]);
   assert.equal(c.pass, true);
+});
+
+test('the example has one public-domain or CC0 photo, committed with its credits entry', () => {
+  const photos = allItems(story()).filter((i) => i.type === 'photo');
+  assert.equal(new Set(photos.map((i) => i.photo)).size, 1, 'exactly one photo');
+  const name = photos[0].photo;
+  const dir = join(EXAMPLE, 'gen', 'photos');
+  assert.deepEqual(readdirSync(dir).sort(), ['credits.json', `${name}.jpg`], 'only the photo and its record');
+  const bytes = readFileSync(join(dir, `${name}.jpg`));
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xff, 0xd8, 0xff], 'a JPEG');
+  assert.ok(bytes.length < 400 * 1024, `${name}.jpg is under 400 KB`);
+  const entries = JSON.parse(readFileSync(join(dir, 'credits.json'), 'utf8'));
+  assert.equal(entries.length, 1);
+  const [entry] = entries;
+  assert.equal(entry.name, name);
+  assert.notEqual(entry.license.trim().toLowerCase(), 'unknown');
+  assert.match(entry.license, /CC0|[Pp]ublic domain/, 'public domain or CC0');
+  assert.match(entry.page_url, /^https:\/\//);
+  assert.match(entry.image_url, /^https:\/\//);
+  assert.ok(entry.credit.trim() !== '', 'a credit line');
+  assert.equal(entry.sha256, createHash('sha256').update(bytes).digest('hex'), 'the record is of this file');
 });
 
 test('photos.md makes the unknown-licence delivery note impossible to miss, and SKILL.md points at it', () => {
