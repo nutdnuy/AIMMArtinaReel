@@ -45,6 +45,29 @@ function spriteNames(projectDir) {
     .map((f) => f.slice(0, -'.png'.length));
 }
 
+// Entries of gen/photos/credits.json, a list written by fetch_photo.py (none while the file does not exist).
+function creditEntries(projectDir) {
+  const file = join(projectDir, 'gen', 'photos', 'credits.json');
+  if (!existsSync(file)) return [];
+  const entries = readJson(file);
+  if (!Array.isArray(entries)) throw new BuildError(`${file} must be a list of photo entries: fetch the photos again with scripts/fetch_photo.py`);
+  return entries;
+}
+
+// The names that have an entry in credits.json.
+export const creditedPhotos = (projectDir) => new Set(creditEntries(projectDir).map((e) => e?.name));
+
+// Names of the photos the story may use: gen/photos/<name>.jpg exists and (unless `credited` is false) the
+// photo has a credits entry, so a photo whose source was not recorded never reaches a reel.
+function photoNames(projectDir, credited) {
+  const dir = join(projectDir, 'gen', 'photos');
+  if (!existsSync(dir)) return [];
+  const have = readdirSync(dir).filter((f) => f.endsWith('.jpg')).map((f) => f.slice(0, -'.jpg'.length));
+  if (!credited) return have;
+  const named = creditedPhotos(projectDir);
+  return have.filter((name) => named.has(name));
+}
+
 // Icon SVGs keyed "<name>:<weight>", the way runtime.mjs looks them up.
 function iconTable(resolved) {
   const icons = {};
@@ -79,7 +102,10 @@ export async function buildProject(projectDir, opts = {}) {
   const timing = readJson(join(projectDir, 'timing.json'), 'run scripts/timing.py first');
   const brand = effectiveBrand(loadBrand(), loadProfile());
 
-  const resolved = validateStory(story, timing, brand, { sprites: spriteNames(projectDir) });
+  // check.mjs sets allowUncredited so that it can report a missing credits entry on its own line; every
+  // other caller (build, still, render) refuses a photo whose source was not recorded.
+  const photos = photoNames(projectDir, opts.allowUncredited !== true);
+  const resolved = validateStory(story, timing, brand, { sprites: spriteNames(projectDir), photos });
 
   const musicSource = resolved.music ? inProject(projectDir, resolved.music) : null;
   if (musicSource && !existsSync(musicSource)) throw new BuildError(`story.music: file not found: ${musicSource}`);
@@ -90,6 +116,7 @@ export async function buildProject(projectDir, opts = {}) {
   rmSync(buildDir, { recursive: true, force: true });
   mkdirSync(join(buildDir, 'engine'), { recursive: true });
   mkdirSync(join(buildDir, 'assets', 'sprites'), { recursive: true });
+  mkdirSync(join(buildDir, 'assets', 'photos'), { recursive: true });
 
   copyFileSync(join(ENGINE, 'page.html'), join(buildDir, 'index.html'));
   copyFileSync(join(ENGINE, 'style.css'), join(buildDir, 'style.css'));
@@ -103,6 +130,11 @@ export async function buildProject(projectDir, opts = {}) {
   const used = new Set(resolved.scenes.flatMap((s) => s.items).filter((i) => i.type === 'sprite').map((i) => i.sprite));
   for (const name of used) {
     copyFileSync(join(projectDir, 'gen', 'sprites', `${name}.png`), join(buildDir, 'assets', 'sprites', `${name}.png`));
+  }
+
+  const usedPhotos = new Set(resolved.scenes.flatMap((s) => s.items).filter((i) => i.type === 'photo').map((i) => i.photo));
+  for (const name of usedPhotos) {
+    copyFileSync(join(projectDir, 'gen', 'photos', `${name}.jpg`), join(buildDir, 'assets', 'photos', `${name}.jpg`));
   }
 
   // The music is copied too, so the build never names a path outside it.

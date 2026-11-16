@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // check.mjs <project>: the review gate before rendering. Builds the project, opens the page, and measures
 // every text box at settled moments: inside the safe zone, clear of the phone-button column, not clipped,
-// and (captions and headlines) clear of the pictures. Also finds stretches with nothing new on screen.
+// and (captions and headlines) clear of the pictures. Also finds stretches with nothing new on screen, and
+// photos whose source was not recorded.
 import { resolve } from 'node:path';
-import { buildProject, exitWithError, isMain } from './build.mjs';
+import { buildProject, creditedPhotos, exitWithError, isMain } from './build.mjs';
 import { openPage } from '../lib/serve.mjs';
 import { SAFE, RIGHT_UI, HEADLINE } from '../engine/layout.mjs';
 import { ENTER_DUR, NUMBER_DUR, BOB_PX, SWAY_DEG, PULSE_SCALE } from '../engine/motion.mjs';
@@ -33,6 +34,13 @@ export function deadBeats(resolved, maxGap = MAX_GAP) {
     if (times[i] - times[i - 1] > maxGap + 1e-9) gaps.push({ t0: times[i - 1], t1: times[i] });
   }
   return gaps;
+}
+
+// The photos the story uses that have no entry in gen/photos/credits.json: a picture whose source was not
+// recorded may not go into a reel.
+export function uncredited(resolved, credited) {
+  const used = resolved.scenes.flatMap((s) => s.items).filter((i) => i.type === 'photo').map((i) => i.photo);
+  return [...new Set(used)].filter((name) => !credited.has(name)).map((photo) => ({ photo, problem: 'no-credits' }));
 }
 
 // ---------- geometry (rects are {x, y, w, h}; zones in layout.mjs are {x0, y0, x1, y1})
@@ -151,7 +159,7 @@ function unique(findings) {
 
 export async function checkProject(projectDir, opts = {}) {
   projectDir = resolve(projectDir);
-  const { resolved } = await buildProject(projectDir, { forceFallback: opts.forceFallback === true });
+  const { resolved } = await buildProject(projectDir, { forceFallback: opts.forceFallback === true, allowUncredited: true });
   const { page, close } = await openPage(projectDir);
   try {
     const font = await page.evaluate(() => window.__paim.fontUsed());
@@ -181,8 +189,11 @@ export async function checkProject(projectDir, opts = {}) {
         overlaps.push(...found.overlaps);
       }
     }
-    const result = { font, text: unique(text), deadBeats: deadBeats(resolved), overlaps: unique(overlaps) };
-    return { pass: result.text.length + result.deadBeats.length + result.overlaps.length === 0, ...result };
+    const result = {
+      font, text: unique(text), deadBeats: deadBeats(resolved), overlaps: unique(overlaps),
+      credits: uncredited(resolved, creditedPhotos(projectDir)),
+    };
+    return { pass: result.text.length + result.deadBeats.length + result.overlaps.length + result.credits.length === 0, ...result };
   } finally {
     await close();
   }
@@ -201,6 +212,8 @@ function report(c) {
   lines.push(`dead beats: ${status(c.deadBeats)}`,
     ...c.deadBeats.map((g) => `  ${secs(g.t0)} to ${secs(g.t1)}: nothing new for ${secs(g.t1 - g.t0)}`));
   lines.push(`overlap: ${status(c.overlaps)}`, ...c.overlaps.map(describe));
+  lines.push(`credits: ${status(c.credits)}`,
+    ...c.credits.map((f) => `  photo "${f.photo}": no entry in gen/photos/credits.json: record its source with scripts/fetch_photo.py`));
   return lines.join('\n');
 }
 

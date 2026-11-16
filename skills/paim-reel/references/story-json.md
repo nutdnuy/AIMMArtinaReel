@@ -14,6 +14,7 @@ Scene  {id, from: "lNN", layout: center|row|stack|versus|grid, bg?: cream|charco
 Item   common: {id, type, at: Anchor, slot?: int (default = index), enter?: pop|drop|slide-l|slide-r|rise|fade (default pop),
                 idle?: none|bob|sway|pulse (default none), exit?: Anchor, x?, y?, size?}
        sprite: {sprite: /^[a-z0-9-]+$/, label?: string}        # <project>/gen/sprites/<sprite>.png
+       photo:  {photo: /^[a-z0-9-]+$/, label?: string, treatment?: mono|color (default mono)}   # <project>/gen/photos/<photo>.jpg
        icon:   {icon: phosphor-name, weight?: fill|duotone, color: orange|green|charcoal|cream, label?: string}
        pill:   {text, bg: orange|green|charcoal}
        number: {to: number, from?: 0, decimals?: 0, prefix?: "", suffix?: "", group?: true, color, label?, source: non-empty string}
@@ -54,7 +55,7 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
 |---|---|---|
 | `center` | 1 | 720 × 720 at x 180, y 440: the biggest picture |
 | `row` | 3 | side by side, y 440–980; width 440 (1 item), 435 (2), 280 (3); label under the picture |
-| `stack` | 3 | 760 wide (x 160–920), 240 tall (224 for 3), top to bottom, centred; a sprite or icon label sits beside its picture |
+| `stack` | 3 | 760 wide (x 160–920), 240 tall (224 for 3), top to bottom, centred; a sprite, icon or photo label sits beside its picture |
 | `versus` | 2 | 760 × 340, top (y 440) and bottom (y 820): the "this or that" split; labels beside the pictures |
 | `grid` | 6 | 2 columns × 3 rows of 435 × 220, left to right then down; a lone last cell is centred. The right cell of the last row reaches the phone-button column: a long label there fails `check.mjs` with `right-ui` |
 
@@ -66,6 +67,12 @@ pictures read better than full grids: prefer `center`, `versus` and `row` of 2.
 
 - `sprite`: a generated sticker, `gen/sprites/<sprite>.png` (made by `gen_sprites.py`; never the
   `-raw` file). The same sprite may appear in many scenes. Drawn contained in its rect.
+- `photo`: a real picture from the web, drawn as a cream paper card with a torn edge, a soft shadow and a
+  tilt of up to 2° (from the item's `seed`), the picture cropped to fill it; the label goes where a
+  sprite's would. `mono` (default) is desaturated with a warm paper tint, `color` shows it as it is.
+  Marks go round the card. `gen/photos/<photo>.jpg` and its entry in `gen/photos/credits.json` come
+  from `scripts/fetch_photo.py`; a photo without both is a build problem naming `fetch_photo.py`.
+  Rules for choosing and fetching photos, and the credits for the delivery note: `photos.md`.
 - `icon`: a Phosphor icon by name (`basket`, `buildings`, `coins`, `piggy-bank`, `chart-line-up`,
   `trend-down`, `shield-check`, `receipt`, `bank`, `wallet`, `scales`, …). An unknown name fails
   with "Did you mean: …" suggestions. Names ending `-logo` are refused. The same icon may be used
@@ -181,7 +188,9 @@ its last entrance, count-up and mark have finished.
 `check.mjs` builds the project, opens it, and measures every text box at settled moments (after
 each entrance; an item with an idle loop is judged over the loop's whole reach). It prints
 `font: …`, then `text:`, `dead beats:` and `overlap:` lines, each `PASS` or `FAIL (n)` with one
-line per finding: `<time> <kind> "<text>": <problem>`. Exit 0 only when all three pass.
+line per finding: `<time> <kind> "<text>": <problem>`. A fourth line, `credits:`, is `PASS` or `FAIL (n)`
+with one line per photo the story uses that has no entry in `gen/photos/credits.json` (`photos.md`).
+Exit 0 only when all four pass.
 
 | Finding | Meaning | Usual fix |
 |---|---|---|

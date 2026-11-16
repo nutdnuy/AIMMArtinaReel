@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { StoryError } from '../../skills/paim-reel/lib/story.mjs';
 import { saveProfile } from '../../skills/paim-reel/lib/profile.mjs';
-import { copyFixture, tempDir, solidPng } from '../helpers.mjs';
+import { copyFixture, tempDir, solidPng, addPhoto } from '../helpers.mjs';
 
 // Every test works on a fixture copy and an empty profile folder.
 function project(t) {
@@ -134,4 +134,52 @@ test('an absolute story.music is not written into the build', async (t) => {
     assert.ok(!readFileSync(join(buildDir, f), 'utf8').includes(music), `${f} holds the absolute music path`);
   }
   assert.ok(!JSON.stringify(resolved).includes(music));
+});
+
+// mini as one centred photo item.
+function photoProject(t, { photo = 'old-bank', ...options } = {}) {
+  const dir = project(t);
+  const story = readStory(dir);
+  story.scenes[0].layout = 'center';
+  story.scenes[0].items = [{ id: 'p', type: 'photo', photo: 'old-bank', label: 'ธนาคาร', at: 'l01' }];
+  writeStory(dir, story);
+  if (photo) addPhoto(dir, photo, '0000FF', options);
+  return dir;
+}
+
+test('a photo item names fetch_photo.py until the photo is fetched', async (t) => {
+  const dir = photoProject(t, { photo: null });
+  await assert.rejects(buildProject(dir), (e) => e instanceof StoryError && /old-bank/.test(e.message) && /fetch_photo\.py/.test(e.message));
+});
+
+test('a used photo is copied into build/assets/photos and no absolute path reaches data.js', async (t) => {
+  const dir = photoProject(t);
+  addPhoto(dir, 'unused-one');
+  const { buildDir, resolved } = await buildProject(dir);
+  assert.ok(existsSync(join(buildDir, 'assets', 'photos', 'old-bank.jpg')));
+  assert.ok(!existsSync(join(buildDir, 'assets', 'photos', 'unused-one.jpg')), 'a photo the story does not use is not copied');
+  const item = resolved.scenes[0].items[0];
+  assert.deepEqual([item.photo, item.treatment], ['old-bank', 'mono']);
+  const data = readFileSync(join(buildDir, 'data.js'), 'utf8');
+  assert.ok(data.includes('"photo":"old-bank"'));
+  assert.ok(!data.includes(dir) && !data.includes('/Users/') && !data.includes('credits.json'), 'data.js names no folder of the project');
+  assert.ok(!/https?:\/\/page\.example/.test(data), 'the credits do not travel into the page');
+});
+
+test('a photo without a credits entry does not build, and the message names it', async (t) => {
+  const dir = photoProject(t, { credited: false });
+  await assert.rejects(buildProject(dir), (e) => e instanceof StoryError && /old-bank/.test(e.message) && /credits\.json/.test(e.message));
+});
+
+test('a credits entry without its picture does not build either', async (t) => {
+  const dir = photoProject(t);
+  const { rmSync } = await import('node:fs');
+  rmSync(join(dir, 'gen', 'photos', 'old-bank.jpg'));
+  await assert.rejects(buildProject(dir), /old-bank.*fetch_photo\.py/s);
+});
+
+test('a damaged credits.json is a build error that names the file', async (t) => {
+  const dir = photoProject(t);
+  writeFileSync(join(dir, 'gen', 'photos', 'credits.json'), '{nope');
+  await assert.rejects(buildProject(dir), /credits\.json is not valid JSON/);
 });

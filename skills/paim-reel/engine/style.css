@@ -100,6 +100,25 @@ html, body {
 }
 .art svg, .art img { display: block; width: 100%; height: 100%; }
 .art img { object-fit: contain; }
+/* A photo: a card of cream paper with a 14 px border, in the art area (and 14 px in from its edges, room for
+   the card's tilt). runtime.mjs cuts the card's outline with a torn clip-path; the shadow follows the cut. */
+.card {
+  position: relative;
+  flex: none;
+  width: calc(100% - 28px);
+  height: calc(100% - 28px);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+.card-paper { position: absolute; inset: 0; background: var(--cream); }
+.card-paper .photo {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  width: calc(100% - 28px);
+  height: calc(100% - 28px);
+  object-fit: cover;
+}
+.photo.mono { filter: grayscale(1) sepia(0.35); }
 .label {
   flex: none;
   max-width: 100%;

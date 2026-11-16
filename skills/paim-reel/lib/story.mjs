@@ -20,12 +20,13 @@ const FREE_SIZE = 240;
 const LAYOUTS = Object.keys(CAPACITY);
 const SCENE_BGS = ['cream', 'charcoal'];
 const FRAMES = ['orange', 'green', 'charcoal'];
-const ITEM_TYPES = ['sprite', 'icon', 'pill', 'number', 'bar'];
+const ITEM_TYPES = ['sprite', 'icon', 'photo', 'pill', 'number', 'bar'];
 const ENTERS = ['pop', 'drop', 'slide-l', 'slide-r', 'rise', 'fade'];
 const IDLES = ['none', 'bob', 'sway', 'pulse'];
 const MARK_TYPES = ['arrow', 'ring', 'cross'];
 const ICON_WEIGHTS = ['fill', 'duotone'];
 const PILL_BGS = ['orange', 'green', 'charcoal'];
+const TREATMENTS = ['mono', 'color'];
 
 const round6 = (x) => Math.round(x * 1e6) / 1e6;
 const round3 = (x) => Math.round(x * 1e3) / 1e3;
@@ -53,7 +54,7 @@ export function resolveAnchor(anchor, timing) {
   return round6(t + a.offset);
 }
 
-export function validateStory(story, timing, brand, assets = { sprites: [] }) {
+export function validateStory(story, timing, brand, assets = { sprites: [], photos: [] }) {
   const problems = [];
   const add = (where, message) => problems.push(where ? `${where}: ${message}` : message);
   if (!isObject(story)) throw new StoryError(['story must be a JSON object']);
@@ -61,6 +62,7 @@ export function validateStory(story, timing, brand, assets = { sprites: [] }) {
   const colors = Object.keys(brand.colors);
   const voiceEnd = timing.duration;
   const sprites = new Set(assets.sprites ?? []);
+  const photos = new Set(assets.photos ?? []);
 
   // The value if it is allowed (or absent and defaulted); otherwise record a problem and use the default.
   function pick(value, allowed, label, where, fallback) {
@@ -216,6 +218,14 @@ export function validateStory(story, timing, brand, assets = { sprites: [] }) {
           } else if (!sprites.has(it.sprite)) {
             add(where, `sprite "${it.sprite}" has not been generated: run scripts/gen_sprites.py first (expects gen/sprites/${it.sprite}.png)`);
           }
+          break;
+        case 'photo':
+          if (typeof it.photo !== 'string' || !SLUG.test(it.photo)) {
+            add(where, `photo ${JSON.stringify(it.photo)} must be lower-case letters, digits and "-" only`);
+          } else if (!photos.has(it.photo)) {
+            add(where, `photo "${it.photo}" has not been fetched, or has no entry in gen/photos/credits.json: run scripts/fetch_photo.py first (expects gen/photos/${it.photo}.jpg)`);
+          }
+          extra.treatment = pick(it.treatment, TREATMENTS, 'treatment', where, 'mono');
           break;
         case 'icon': {
           extra.weight = pick(it.weight, ICON_WEIGHTS, 'weight', where, 'fill');

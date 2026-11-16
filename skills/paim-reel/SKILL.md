@@ -132,7 +132,9 @@ run `timing.py align` again.
      if P.AIM says so.
 3. Open every `gen/sprites/<name>.png`. Redraw (`rm` it, then `--only <name>`; at most twice) one
    with text, a logo, a wrong colour, more than one object, or an `OFF-PALETTE` line.
-4. `<project>/story.json` (`references/story-json.md`): one scene per idea; the sprite is the
+4. Photos, only for a real, nameable thing a line mentions (a building, a banknote, a place):
+   `references/photos.md` (search the web, `scripts/fetch_photo.py`, read every photo, credits).
+5. `<project>/story.json` (`references/story-json.md`): one scene per idea; the sprite is the
    thing the line names, entering on the phrase that names it; something new at least every 3 s;
    orange for the subject of each line, green for growth or the safer option; one highlighted
    phrase per line; every `number` has a `source`; end on a takeaway scene.
@@ -141,9 +143,9 @@ run `timing.py align` again.
 
 1. `node <skill>/scripts/build.mjs <project>` prints `built <slug> (<duration> s)`. Exit 2 lists
    every story problem, one per line: fix them all and build again.
-2. `node <skill>/scripts/check.mjs <project>`: exit 0 when `text:`, `dead beats:` and `overlap:`
-   all say `PASS`. Exit 1: fix each finding (`references/story-json.md`) and run it again. Never
-   render on a FAIL.
+2. `node <skill>/scripts/check.mjs <project>`: exit 0 when `text:`, `dead beats:`, `overlap:` and
+   `credits:` all say `PASS`. Exit 1: fix each finding (`references/story-json.md`) and run it
+   again. Never render on a FAIL.
 3. `node <skill>/scripts/still.mjs <project> --scenes <project>/sheet.png`: one frame per scene,
    once everything in it has settled. Open the sheet and fix a covered, crowded or empty scene or
    a badly wrapped label; then build, check and look again. A still taken at any other time can
@@ -169,6 +171,9 @@ Send the MP4 and its preview (topic mode: also the read-aloud sheet) and report:
   profile's `image_cmd` is set;
 - what was checked: `check.mjs` all PASS, the `--scenes` sheet looked at, `ffprobe`, and every
   on-screen figure with its source;
+- with web photos: `<skill>/.venv/bin/python <skill>/scripts/credits.py <project>`, attach the
+  `renders/<slug>-credits.md` it writes, and list every photo whose licence is `unknown` with its
+  page URL, saying plainly that those may be copyrighted and are used at her decision;
 - any claim left off screen because it could not be verified; any empty profile value (no
   handle or disclaimer on the end card);
 - that you cannot listen to the mix, so she should play it once before posting.

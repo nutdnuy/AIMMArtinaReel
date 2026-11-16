@@ -10,7 +10,7 @@ import { saveProfile } from '../../skills/paim-reel/lib/profile.mjs';
 import { StoryError } from '../../skills/paim-reel/lib/story.mjs';
 import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { ENTER_DUR } from '../../skills/paim-reel/engine/motion.mjs';
-import { copyFixture, tempDir, sineWav, solidPng, ffprobe } from '../helpers.mjs';
+import { copyFixture, tempDir, sineWav, solidPng, ffprobe, addPhoto } from '../helpers.mjs';
 
 const SLOW = { timeout: 120_000 };
 
@@ -233,6 +233,104 @@ test('a sprite is drawn', SLOW, async (t) => {
     const rgb = await pixelAt(page, png, Math.round(rect.x + rect.w / 2), Math.round(rect.y + rect.h / 2));
     assert.ok(near(rgb, '#0000FF', 16), `centre pixel is ${rgb}`);
   });
+});
+
+// mini with `items` (photo items by default) in one scene of the given layout, and the photos they name.
+function photoScene(t, items, layout = 'center', photos = { 'old-bank': 'C0402F' }, marks = []) {
+  const dir = project(t);
+  const story = readJson(join(dir, 'story.json'));
+  Object.assign(story.scenes[0], { layout, items, marks });
+  writeJson(join(dir, 'story.json'), story);
+  for (const [name, hex] of Object.entries(photos)) addPhoto(dir, name, hex);
+  return dir;
+}
+
+const spread = (rgb) => Math.max(...rgb) - Math.min(...rgb);
+const photoItem = (id, extra = {}) => ({ id, type: 'photo', photo: 'old-bank', at: 'l01', ...extra });
+
+test('a photo is a paper card: the centre of its art box is the picture, not the paper', SLOW, async (t) => {
+  const dir = photoScene(t, [photoItem('p', { treatment: 'color', label: 'ธนาคาร' })]);
+  await withPage(dir, async (page) => {
+    const { rect, t: at } = readJson(join(dir, 'build', 'resolved.json')).scenes[0].items[0];
+    await seek(page, at + ENTER_DUR + 0.05);
+    const png = await page.screenshot({ type: 'png' });
+    const art = await page.evaluate(() => {
+      const r = document.querySelector('.card').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: document.querySelector('.card').offsetWidth };
+    });
+    const centre = await pixelAt(page, png, Math.round(art.x), Math.round(art.y));
+    assert.ok(near(centre, '#C0402F', 24), `centre pixel is ${centre}`);
+    assert.ok(art.w > 600 && art.w < rect.w, `the card (${art.w} px) fills the art box (${rect.w} px) less its margin`);
+    // the label is still text the page reports, and the picture is not
+    const boxes = await page.evaluate(() => window.__paim.textBoxes());
+    assert.deepEqual(boxes.map((b) => [b.kind, b.item, b.text]), [['label', 'p', 'ธนาคาร'], ['caption', undefined, boxes[1].text]]);
+  });
+});
+
+test('mono is the default: desaturated with a warm tint; color shows the picture as it is', SLOW, async (t) => {
+  const dir = photoScene(t, [photoItem('m'), photoItem('c', { treatment: 'color' })], 'row');
+  await withPage(dir, async (page) => {
+    const { items } = readJson(join(dir, 'build', 'resolved.json')).scenes[0];
+    await seek(page, items[1].t + ENTER_DUR + 0.05);
+    const png = await page.screenshot({ type: 'png' });
+    const centres = await page.evaluate(() => [...document.querySelectorAll('.card')].map((c) => {
+      const r = c.getBoundingClientRect();
+      return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
+    }));
+    const [mono, color] = [await pixelAt(page, png, ...centres[0]), await pixelAt(page, png, ...centres[1])];
+    assert.ok(spread(color) > 120, `color keeps its colour: ${color}`);
+    assert.ok(spread(mono) < 70, `mono is nearly grey: ${mono}`);
+    assert.ok(mono[0] >= mono[2], `with a warm tint (red not below blue): ${mono}`);
+  });
+});
+
+test('the card tilt and torn outline come from the item seed, and are the same on every load', SLOW, async (t) => {
+  const dir = photoScene(t, [photoItem('a'), photoItem('b')], 'row');
+  const look = (page) => page.evaluate(() => [...document.querySelectorAll('.card')].map((card) => {
+    const m = new DOMMatrix(getComputedStyle(card).transform);
+    return {
+      tilt: Math.atan2(m.b, m.a) * 180 / Math.PI,
+      clip: card.querySelector('.card-paper').style.clipPath,
+      size: [card.offsetWidth, card.offsetHeight],
+    };
+  }));
+  const first = await withPage(dir, async (page) => { await seek(page, 2); return look(page); });
+  const second = await withPage(dir, async (page) => { await seek(page, 1); await seek(page, 2); return look(page); });
+  assert.deepEqual(first, second);
+  for (const c of first) {
+    assert.ok(Math.abs(c.tilt) <= 2 + 1e-6, `tilt ${c.tilt}`);
+    assert.match(c.clip, /^path\("M [\d. ]+ L /);
+  }
+  assert.notEqual(first[0].tilt, first[1].tilt, 'each seed tilts its card its own way');
+  assert.notEqual(first[0].clip, first[1].clip, 'and tears its own edge');
+});
+
+test('a ring on a photo goes round the card, not the label', SLOW, async (t) => {
+  const dir = photoScene(t, [photoItem('p', { label: 'ธนาคาร' })], 'center', { 'old-bank': 'C0402F' },
+    [{ type: 'ring', on: 'p', at: 'l01@1' }]);
+  await withPage(dir, async (page) => {
+    const { marks } = readJson(join(dir, 'build', 'resolved.json')).scenes[0];
+    await seek(page, marks[0].t + 1);
+    const got = await page.evaluate(() => {
+      const card = document.querySelector('.card');
+      const r = card.getBoundingClientRect();
+      const stage = document.getElementById('stage').getBoundingClientRect();
+      const nums = document.querySelector('.marks path').getAttribute('d').match(/-?[\d.]+/g).map(Number);
+      return {
+        cx: r.left - stage.left + r.width / 2, cy: r.top - stage.top + r.height / 2, w: card.offsetWidth, h: card.offsetHeight,
+        ring: { x1: nums[0], y1: nums[1], rx: nums[2], ry: nums[3], x2: nums[7], y2: nums[8] },
+      };
+    });
+    assert.ok(Math.abs((got.ring.x1 + got.ring.x2) / 2 - got.cx) < 1.5, 'the ring is centred on the card horizontally');
+    assert.ok(Math.abs(got.ring.rx - (got.w / 2 + 16)) < 1.5, `ring half-width ${got.ring.rx} for a card ${got.w} px wide`);
+    assert.ok(got.ring.ry <= got.h / 2 + 16 + 1.5, 'and pulled in under the label');
+  });
+});
+
+test('a story whose photo has lost its credits entry does not render', async (t) => {
+  const dir = photoScene(t, [photoItem('p')]);
+  writeJson(join(dir, 'gen', 'photos', 'credits.json'), []);
+  await assert.rejects(renderProject(dir), (e) => e instanceof StoryError && /old-bank/.test(e.message));
 });
 
 test('music bed is accepted', SLOW, async (t) => {

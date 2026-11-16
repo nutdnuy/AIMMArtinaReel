@@ -5,7 +5,7 @@ import { textColorOn } from './colors.mjs';
 import { captionAt } from './captions.mjs';
 import { W, H, HEADLINE, CAPTION } from './layout.mjs';
 import { ENTER_DUR, MARK_DUR, enterState, itemState, progress, numberAt, barAt } from './motion.mjs';
-import { hashSeed, mottle, paintPaper, paintSheet } from './paper.mjs';
+import { hashSeed, mottle, paintPaper, paintSheet, rng, tornPath } from './paper.mjs';
 
 const PRIMARY = 'Sukhumvit Set';
 const FALLBACK = 'IBM Plex Sans Thai';
@@ -18,6 +18,7 @@ const ARROW_HEAD = 44;
 const RING_PAD = 16; // px between a picture and its ring
 const RING_CLEAR = 8; // px from the ring's centre line to a label: half the 12 px stroke, plus 2
 const FRAME_INSET = 36; // px of the frame colour around a scene's torn sheet of paper
+const CARD_TILT = 2; // degrees: a photo card is turned by a seeded angle between -CARD_TILT and CARD_TILT
 
 const DATA = window.__PAIM_DATA;
 const stage = document.getElementById('stage');
@@ -153,6 +154,9 @@ function addImage(parent, className, src) {
   return img;
 }
 
+// A photo item's own angle, from its seed alone: the same on every load and every frame.
+const cardTilt = (seed) => Math.round((rng((seed ^ 0xCA2D) >>> 0)() * 2 - 1) * CARD_TILT * 1000) / 1000;
+
 function buildItem(item, parent, textColor, side) {
   const box = el('div', `item ${item.type}-item${side ? ' side' : ''}`, parent);
   place(box, item.rect);
@@ -164,6 +168,23 @@ function buildItem(item, parent, textColor, side) {
     case 'sprite':
       addImage(el('div', 'art', box), '', `assets/sprites/${item.sprite}.png`);
       break;
+    case 'photo': {
+      // A card of cream paper in the art area: the picture cropped to fill inside a border, the card's outline
+      // torn from the item's seed (cut once the card's size is known), the whole card turned a little. Marks
+      // treat the card as the picture.
+      const paper = el('div', 'card-paper', el('div', 'card', el('div', 'art', box)));
+      v.card = paper.parentNode;
+      v.card.style.transform = `rotate(${cardTilt(item.seed)}deg)`;
+      addImage(paper, `photo ${item.treatment}`, `assets/photos/${item.photo}.jpg`);
+      let cut = '';
+      v.fit = () => {
+        const { offsetWidth: w, offsetHeight: h } = v.card;
+        if (w === 0 || cut === `${w}x${h}`) return;
+        cut = `${w}x${h}`;
+        paper.style.clipPath = `path("${tornPath(w, h, item.seed)}")`;
+      };
+      break;
+    }
     case 'pill': {
       const art = el('div', 'art', box);
       const pill = el('div', 'pill text', art, item.text);
@@ -204,7 +225,7 @@ function buildItem(item, parent, textColor, side) {
     default:
       throw new Error(`unknown item type "${item.type}"`);
   }
-  v.art = box.querySelector('.art');
+  v.art = v.card ?? box.querySelector('.art');
   v.label = null;
   if (hasText(item.label)) {
     const label = el('div', 'label text', box, item.label);
@@ -316,7 +337,7 @@ function buildMark(mark, svg, byId, textColor) {
 // In the wide slots of versus and stack, a picture's label goes beside it rather than under it, so the
 // picture keeps the slot's full height.
 const SIDE_LAYOUTS = ['versus', 'stack'];
-const sideLabel = (scene, item) => SIDE_LAYOUTS.includes(scene.layout) && ['sprite', 'icon'].includes(item.type)
+const sideLabel = (scene, item) => SIDE_LAYOUTS.includes(scene.layout) && ['sprite', 'icon', 'photo'].includes(item.type)
   && hasText(item.label) && item.rect.w >= 1.8 * item.rect.h;
 
 function buildScene(scene) {

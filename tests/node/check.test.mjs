@@ -9,7 +9,7 @@ import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { SAFE } from '../../skills/paim-reel/engine/layout.mjs';
 import { ENTER_DUR } from '../../skills/paim-reel/engine/motion.mjs';
-import { copyFixture, tempDir } from '../helpers.mjs';
+import { copyFixture, tempDir, addPhoto } from '../helpers.mjs';
 
 const SLOW = { timeout: 120_000 };
 const CHECK_CLI = fileURLToPath(new URL('../../skills/paim-reel/scripts/check.mjs', import.meta.url));
@@ -263,4 +263,41 @@ test('CLI exit code', SLOW, (t) => {
   assert.match(bad.stdout, /^overlap: PASS$/m);
   assert.match(bad.stdout, /right-ui/);
   assert.match(bad.stdout, /ติดตาม/);
+});
+
+// mini with its second icon replaced by a photo called old-bank, and the photo added to the project.
+function photoProject(t, { credited = true } = {}) {
+  const dir = project(t, 'mini', (story) => {
+    story.scenes[0].items[1] = { id: 'etf', type: 'photo', photo: 'old-bank', label: 'ธนาคาร', at: 'l02' };
+  });
+  addPhoto(dir, 'old-bank', 'C0402F', { credited });
+  return dir;
+}
+
+test('a credited photo passes, and the credits line says so', SLOW, async (t) => {
+  const c = await checkProject(photoProject(t));
+  assert.deepEqual(c.credits, []);
+  assert.equal(c.pass, true, JSON.stringify(c));
+});
+
+test('a used photo whose credits entry was deleted fails the credits line only', SLOW, async (t) => {
+  const c = await checkProject(photoProject(t, { credited: false }));
+  assert.equal(c.pass, false);
+  assert.deepEqual([c.text, c.deadBeats, c.overlaps], [[], [], []]);
+  assert.deepEqual(c.credits.map((f) => f.photo), ['old-bank']);
+});
+
+test('CLI: credits PASS without photos, and FAIL (n) naming the photo when an entry is missing', SLOW, (t) => {
+  const run = (dir) => spawnSync('node', [CHECK_CLI, dir], { encoding: 'utf8', env: process.env, timeout: 100_000 });
+  const plain = run(project(t));
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.match(plain.stdout, /^credits: PASS$/m);
+  const ok = run(photoProject(t));
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.match(ok.stdout, /^credits: PASS$/m);
+  const bad = run(photoProject(t, { credited: false }));
+  assert.equal(bad.status, 1, bad.stdout + bad.stderr);
+  assert.match(bad.stdout, /^credits: FAIL \(1\)$/m);
+  assert.match(bad.stdout, /photo "old-bank".*fetch_photo\.py/);
+  assert.match(bad.stdout, /^text: PASS$/m);
 });

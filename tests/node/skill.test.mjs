@@ -117,3 +117,16 @@ test('the example estimates, builds and passes check.mjs with zero findings', SL
   assert.deepEqual([c.text, c.deadBeats, c.overlaps], [[], [], []]);
   assert.equal(c.pass, true);
 });
+
+test('photos.md makes the unknown-licence delivery note impossible to miss, and SKILL.md points at it', () => {
+  const photos = readFileSync(join(SKILL, 'references', 'photos.md'), 'utf8');
+  assert.match(photos, /\*\*Attach the credits file\. List every photo whose licence is `unknown`, each with its page URL,/);
+  assert.match(photos, /may be copyrighted and are used at P\.AIM's own decision/);
+  for (const rule of [/watermark/, /other creators' videos/, /private people/, /company logo/, /Never copy|copied nowhere/, /Read every fetched photo/i]) {
+    assert.match(photos, rule);
+  }
+  const text = skillText();
+  for (const mention of ['references/photos.md', 'scripts/fetch_photo.py', 'scripts/credits.py', '`unknown`']) {
+    assert.ok(text.includes(mention), `SKILL.md mentions ${mention}`);
+  }
+});

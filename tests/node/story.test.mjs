@@ -161,6 +161,29 @@ test('sprite must have been generated', () => {
   assert.equal(validateStory(sp, T, brand, { sprites: ['basket'] }).scenes[0].items[1].sprite, 'basket');
 });
 
+test('photo must have been fetched: a missing one names fetch_photo.py, a present one resolves', () => {
+  const ph = structuredClone(S);
+  ph.scenes[0].items[1] = { id: 'b', type: 'photo', photo: 'old-bank', label: 'ธนาคาร', at: 'l02' };
+  assert.throws(() => validateStory(ph, T, brand),
+    (e) => e.problems.some((p) => /old-bank/.test(p) && /fetch_photo\.py/.test(p)));
+  assert.throws(() => validateStory(ph, T, brand, { sprites: ['old-bank'], photos: [] }), StoryError);
+  const item = validateStory(ph, T, brand, { sprites: [], photos: ['old-bank'] }).scenes[0].items[1];
+  assert.equal(item.photo, 'old-bank');
+  assert.equal(item.treatment, 'mono', 'mono is the default');
+  assert.equal(item.label, 'ธนาคาร');
+  assert.equal(typeof item.seed, 'number');
+});
+
+test('photo treatment is mono or color; the name is a slug', () => {
+  const ph = structuredClone(S);
+  ph.scenes[0].items[1] = { id: 'b', type: 'photo', photo: 'old-bank', treatment: 'color', at: 'l02' };
+  assert.equal(validateStory(ph, T, brand, { photos: ['old-bank'] }).scenes[0].items[1].treatment, 'color');
+  ph.scenes[0].items[1].treatment = 'sepia';
+  assert.ok(problemsOf(ph, { photos: ['old-bank'] }).some((p) => /treatment "sepia"/.test(p) && /mono, color/.test(p)));
+  ph.scenes[0].items[1] = { id: 'b', type: 'photo', photo: '../Old Bank', at: 'l02' };
+  assert.ok(problemsOf(ph, { photos: ['old-bank'] }).some((p) => /photo "..\/Old Bank"/.test(p) && /lower-case/.test(p)));
+});
+
 // Each mutation below breaks exactly one rule, so each must produce a problem naming it.
 const REJECTIONS = [
   ['duplicate item id in a scene', (s) => { s.scenes[0].items[1].id = 'stock'; }, /duplicate.*stock/i],
