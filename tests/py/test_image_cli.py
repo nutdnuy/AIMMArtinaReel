@@ -31,9 +31,40 @@ def test_commands_exact(monkeypatch):
     monkeypatch.delenv("PAIM_IMAGE_CMD", raising=False)
     assert build_command("codex", "A", Path("/p")) == [
         "codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", "/p", "A"]
-    assert build_command("gemini", "A", Path("/p")) == ["gemini", "-p", "A", "--yolo"]
+    assert build_command("gemini", "A", Path("/p")) == ["gemini", "-p", "A", "--yolo", "--skip-trust"]
     monkeypatch.setenv("PAIM_IMAGE_CMD", "agy --dangerously-skip-permissions")
     assert build_command("gemini", "A", Path("/p")) == ["agy", "--dangerously-skip-permissions", "-p", "A"]
+
+
+def test_generate_with_relative_folder(tmp_path, fake, monkeypatch):
+    """The command runs with cwd=folder, so a relative -C or file path would point at nothing."""
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+    real_run = subprocess.run
+
+    def spy(cmd, **kw):
+        seen["cmd"], seen["cwd"] = cmd, kw["cwd"]
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    out = generate("codex", Path("proj/gen/sprites"), "a-raw.png", "x", wait=10)
+    assert out.is_absolute() and out.is_file() and out == tmp_path.resolve() / "proj/gen/sprites/a-raw.png"
+    assert Path(seen["cwd"]).is_absolute()
+
+
+def test_build_command_codex_folder_is_absolute_when_generate_calls_it(tmp_path, monkeypatch):
+    monkeypatch.delenv("PAIM_IMAGE_CMD", raising=False)
+    monkeypatch.chdir(tmp_path)
+    captured = {}
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        raise FileNotFoundError
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(ImageCliError):
+        generate("codex", Path("rel/dir"), "a-raw.png", "x")
+    assert captured["cmd"][captured["cmd"].index("-C") + 1] == str(tmp_path.resolve() / "rel/dir")
 
 
 def test_profile_image_cmd_and_env_wins(monkeypatch):

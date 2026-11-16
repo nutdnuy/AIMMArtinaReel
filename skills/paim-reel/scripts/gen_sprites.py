@@ -94,9 +94,9 @@ def run(project: Path, only: "list[str] | None", parallel: int, agent: str) -> i
             if first:
                 say(f"QUOTA {e}")
             return
-        except (ImageCliError, KeyFailed) as e:
+        except Exception as e:   # ImageCliError, KeyFailed, or anything unexpected: one row never kills the batch
             with log.open("a", encoding="utf-8") as f:
-                f.write(f"\n{' '.join(str(e).split())}\n")
+                f.write(f"\n{type(e).__name__}: {' '.join(str(e).split())}\n")
             failed.append(name)
             say(f"FAIL {name} ({log})")
             return

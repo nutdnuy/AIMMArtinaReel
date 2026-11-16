@@ -34,7 +34,11 @@ class KeyFailed(Exception):
 
 def key(raw: Path, out: Path) -> dict:
     """Write the keyed, trimmed sticker to `out`; return {"size", "opaque", "on_palette"}."""
-    px = np.asarray(Image.open(raw).convert("RGBA"), dtype=np.float64)
+    try:
+        px = np.asarray(Image.open(raw).convert("RGBA"), dtype=np.float64)
+    except (OSError, ValueError) as e:   # PIL.UnidentifiedImageError is an OSError
+        raise KeyFailed("the file is not a readable image (the CLI may have saved an error page "
+                        f"or a cut-off file): {raw}") from e
     rgb, alpha = px[..., :3], px[..., 3] / 255.0
 
     if (alpha < 128 / 255.0).mean() <= REAL_ALPHA_SHARE:

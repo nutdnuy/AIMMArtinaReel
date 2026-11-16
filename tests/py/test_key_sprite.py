@@ -80,3 +80,11 @@ def test_off_palette(tmp_path):
     raw = make_raw(tmp_path / "raw.png", disc=(0x20, 0x40, 0xFF), square=(0x20, 0x40, 0xFF))
     info = key(raw, tmp_path / "out.png")
     assert info["on_palette"] < 0.2
+
+
+@pytest.mark.parametrize("content", [b"<html>429 error page</html>", b"\x89PNG\r\n\x1a\ntruncated", b""])
+def test_key_unreadable_file(tmp_path, content):
+    raw = tmp_path / "raw.png"
+    raw.write_bytes(content)
+    with pytest.raises(KeyFailed, match="not a readable image"):
+        key(raw, tmp_path / "out.png")

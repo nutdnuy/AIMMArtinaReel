@@ -116,6 +116,30 @@ def test_batch_key_failure_is_a_fail(project, tmp_path):
     assert "background" in (project / "gen" / "sprites" / "coin.log").read_text()
 
 
+def test_batch_junk_file_is_a_fail_not_a_crash(project, tmp_path):
+    stub = tmp_path / "html_cli.py"
+    stub.write_text(
+        "import re, sys\n"
+        "name = re.search(r'current directory as (\\S+?)\\. Do nothing', sys.argv[sys.argv.index('-p') + 1]).group(1)\n"
+        "open(name, 'w').write('<html>error page</html>')\n")
+    r = run(project, tmp_path, "--only", "coin,basket", extra={"PAIM_IMAGE_CMD": f"{sys.executable} {stub}"})
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr
+    assert sorted(l.split(" (")[0] for l in r.stdout.splitlines()) == ["FAIL basket", "FAIL coin"]
+    assert "not a readable image" in (project / "gen" / "sprites" / "coin.log").read_text()
+
+
+def test_batch_relative_project_path(project, tmp_path):
+    """gen_sprites.py proj (relative) works: the image CLI runs inside gen/sprites."""
+    env = {k: v for k, v in os.environ.items() if k not in ("PAIM_IMAGE_CMD", "FAKE_MODE")}
+    env.update({"PAIM_CONFIG_DIR": str(tmp_path / "config"), "FAKE_CALLS": str(tmp_path / "calls.txt"),
+                "PAIM_IMAGE_CMD": f"{sys.executable} {FAKE}"})
+    r = subprocess.run([sys.executable, str(GEN), "proj", "--only", "coin"], env=env, cwd=tmp_path,
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (project / "gen" / "sprites" / "coin.png").is_file()
+
+
 @pytest.mark.parametrize("row", ["Basket!\tx", "has space\tx", "ok\t", "ok", "\tx"])
 def test_batch_bad_row(project, tmp_path, row):
     (project / "sprites.tsv").write_text(f"coin\ta coin\n{row}\n", encoding="utf-8")

@@ -88,7 +88,7 @@ def build_command(provider: str, ask: str, folder: Path, profile: "dict | None" 
     if provider == "codex":
         return ["codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", str(folder), ask]
     if provider == "gemini":
-        return ["gemini", "-p", ask, "--yolo"]
+        return ["gemini", "-p", ask, "--yolo", "--skip-trust"]
     raise ImageCliError(f"unknown image provider: {provider}")
 
 
@@ -131,7 +131,7 @@ def _wait_for(target: Path, log: Path, wait: float) -> bool:
 def generate(provider: str, folder: Path, filename: str, subject: str, size: str = "1024x1024",
              wait: int = 300, profile: "dict | None" = None) -> Path:
     """Ask the image CLI to draw `subject` into <folder>/<filename>; return that path."""
-    folder = Path(folder)
+    folder = Path(folder).resolve()   # the command runs with cwd=folder, so a relative -C would miss
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / filename
     log = folder / f"{re.sub(r'-raw$', '', Path(filename).stem)}.log"   # basket-raw.png -> basket.log
