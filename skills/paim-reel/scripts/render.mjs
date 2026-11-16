@@ -5,10 +5,16 @@ import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { buildProject, BuildError, exitWithError, isMain } from './build.mjs';
 import { openPage } from '../lib/serve.mjs';
+import { sfxEvents, loadSounds, mixBed, writeFloatWav } from '../lib/sfx.mjs';
 
 const CRF = 18;
 const PREVIEW_CRF = 26;
 const MUSIC_DB = -30;
+// Ceiling of the limiter on the final mix, and the rate it works at. It runs at 4x the sample rate so that it
+// limits the true (between-samples) peak, and 2 dB under full scale so that AAC encoding, which can add up
+// to about 1 dB on wideband material, still leaves the true peak of the file at or under -1 dBFS.
+const LIMIT_DB = -2;
+const LIMIT_RATE = 192000;
 
 // Runs ffmpeg to completion. Resolves with nothing, rejects with the tail of its log.
 function ffmpegProcess(args) {
@@ -28,23 +34,52 @@ function ffmpegProcess(args) {
   return { child, done };
 }
 
-// Audio inputs and the filter graph for the final render, or null for a silent video.
+// Audio inputs and the filter graph, or null for a video without sound.
+//  - final (aligned timing, voice/voice.wav): the voice, the music bed if any, and the sound effects;
+//  - draft (estimated timing): the sound effects only, so no voice and no music;
+//  - story.sfx false: the voice and music alone (as before the effects existed), nothing for a draft.
+// An aligned story whose voice file is missing stays silent, so a missing voice is noticed.
+// With effects the sum goes through a limiter. The effects are mixed into one float track first
+// (build/sfx.wav) so that the graph stays the same size however many events there are.
 function audioPlan(projectDir, buildDir, resolved, videoInputs) {
   const voice = join(projectDir, 'voice', 'voice.wav');
-  if (resolved.estimated || !existsSync(voice)) return null;
+  const withVoice = !resolved.estimated && existsSync(voice);
+  const events = sfxEvents(resolved);
+  if (!withVoice && !(resolved.estimated && events.length)) return null;
   const total = resolved.duration;
-  const inputs = ['-i', voice];
-  let graph = `[${videoInputs}:a]aresample=48000,apad=whole_dur=${total}[voice]`;
-  if (resolved.music) {
-    inputs.push('-stream_loop', '-1', '-i', join(buildDir, resolved.music)); // build.mjs copied it there
-    const fade = Math.max(total - resolved.voiceEnd, 0.01);
-    graph += `;[${videoInputs + 1}:a]aresample=48000,atrim=duration=${total},`
-      + `volume=${MUSIC_DB}dB,afade=t=out:st=${resolved.voiceEnd}:d=${fade}[music]`
-      + ';[voice][music]amix=inputs=2:duration=first:normalize=0[a]';
-  } else {
-    graph += ';[voice]anull[a]';
+  const inputs = [];
+  const parts = [];
+  const labels = [];
+  let index = videoInputs; // ffmpeg input number of the next input added
+  const addInput = (...args) => {
+    inputs.push(...args);
+    return index++;
+  };
+  if (withVoice) {
+    parts.push(`[${addInput('-i', voice)}:a]aresample=48000,apad=whole_dur=${total}[voice]`);
+    labels.push('[voice]');
+    if (resolved.music) {
+      const fade = Math.max(total - resolved.voiceEnd, 0.01);
+      const music = addInput('-stream_loop', '-1', '-i', join(buildDir, resolved.music)); // build.mjs copied it there
+      parts.push(`[${music}:a]aresample=48000,atrim=duration=${total},`
+        + `volume=${MUSIC_DB}dB,afade=t=out:st=${resolved.voiceEnd}:d=${fade}[music]`);
+      labels.push('[music]');
+    }
   }
-  return { inputs, graph };
+  if (events.length) {
+    const bed = join(buildDir, 'sfx.wav');
+    writeFloatWav(bed, mixBed(events, total, loadSounds()));
+    parts.push(`[${addInput('-i', bed)}:a]aresample=48000[sfx]`);
+    labels.push('[sfx]');
+  }
+  const limit = events.length
+    ? `,aresample=${LIMIT_RATE},alimiter=limit=${(10 ** (LIMIT_DB / 20)).toFixed(4)}:level=disabled:latency=1,aresample=48000`
+    : '';
+  const mixed = labels.length > 1
+    ? `${labels.join('')}amix=inputs=${labels.length}:duration=first:normalize=0`
+    : `${labels[0]}anull`;
+  parts.push(`${mixed}${limit}[a]`);
+  return { inputs, graph: parts.join(';') };
 }
 
 export async function renderProject(projectDir, opts = {}) {

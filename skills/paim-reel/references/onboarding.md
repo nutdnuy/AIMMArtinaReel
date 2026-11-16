@@ -238,7 +238,7 @@ pictures are drawn: the example brings its own.
 
 > ต่อไปจะลองทำคลิปตัวอย่างให้ดูหนึ่งคลิปนะคะ อาจใช้เวลาสิบกว่านาที ระหว่างนี้พักก่อนได้เลยค่ะ
 
-(The render is silent while it works; on the test Mac this 36 s example took about 15 minutes.
+(The render prints nothing while it works; on the test Mac this 36 s example took about 15 minutes.
 Run it in the background if your tools allow, and wait for it.)
 
 `<projects_dir>` is `profile.mjs get projects_dir`. If `<projects_dir>/example` is already there,
@@ -255,7 +255,7 @@ node <skill>/scripts/render.mjs <projects_dir>/example --preview
 `<projects_dir>/example/renders/etf-vs-stock-draft.mp4` and its preview
 `etf-vs-stock-draft-preview.mp4`. Send her the preview:
 
-> นี่คือคลิปตัวอย่างค่ะ คลิปนี้ยังไม่มีเสียง เพราะยังไม่ได้อัดเสียงพี่เอมค่ะ ท้ายคลิปจะเห็นชื่อช่องที่เพิ่งตั้งไว้ คลิปจริงจะมีเสียงพี่เอมและคำบรรยายตรงกับเสียงค่ะ
+> นี่คือคลิปตัวอย่างค่ะ คลิปนี้ยังไม่มีเสียงพี่เอม มีแค่เสียงเอฟเฟกต์เบา ๆ เพราะยังไม่ได้อัดเสียงค่ะ ท้ายคลิปจะเห็นชื่อช่องที่เพิ่งตั้งไว้ คลิปจริงจะมีเสียงพี่เอมและคำบรรยายตรงกับเสียงค่ะ
 
 If a command exits non-zero, run `doctor.sh` again and fix what it reports (section 3); do not
 go on until the draft exists.

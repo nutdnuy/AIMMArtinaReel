@@ -8,7 +8,7 @@ every problem at once (one per line, exit 2).
 ## Schema
 
 ```
-story  {slug: /^[a-z0-9-]+$/, title: string, music?: string|null, highlight?: Anchor[], scenes: Scene[]}
+story  {slug: /^[a-z0-9-]+$/, title: string, music?: string|null, sfx?: boolean (default true), highlight?: Anchor[], scenes: Scene[]}
 Scene  {id, from: "lNN", layout: center|row|stack|versus|grid, bg?: cream|charcoal (default cream),
         frame?: orange|green|charcoal, headline?: {text, at?: Anchor}, items: Item[], marks?: Mark[]}
 Item   common: {id, type, at: Anchor, slot?: int (default = index), enter?: pop|drop|slide-l|slide-r|rise|fade (default pop),
@@ -48,6 +48,22 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
   fills the canvas.
 - `music` (optional): an audio file, absolute or relative to the project folder, mixed at
   -30 dB under the voice in the final render and faded out over the end card.
+- `sfx` (optional, default `true`): sound effects placed from the story, nothing to write. `false`
+  turns them all off (a draft then has no audio at all). They come from `assets/sfx/` and sit under
+  the voice; the sum goes through a limiter at -2 dBFS (true peak). A draft carries the effects
+  only: no voice, no music. A part render (`--from/--to`) has no audio.
+
+  | When | Sound | Level |
+  |---|---|---|
+  | a scene starts (not the first) | `paper` | -20 dB |
+  | an item enters: `pop` / `drop` / `slide-l`, `slide-r`, `rise` / `fade` | `pop` / `thud` / `whoosh` / none | -16 / -16 / -20 dB |
+  | a `photo` item enters (instead of its entrance sound) | `paper` | -18 dB |
+  | a mark is drawn | `tick` | -18 dB |
+  | a `number` counts (0.2, 0.45, 0.7 s after it appears, besides its entrance) | 3 x `tick` | -22 dB |
+  | the end card starts | `chime` | -16 dB |
+
+  A sound is dropped when the same sound played less than 0.12 s before, and at most 60 effects
+  are placed (the earliest). Levels are relative to the files, whose peak is -3 dBFS.
 
 ## Layouts (canvas px; CONTENT is x 90–990, y 440–1160)
 

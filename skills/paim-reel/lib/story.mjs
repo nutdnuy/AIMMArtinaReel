@@ -92,6 +92,9 @@ export function validateStory(story, timing, brand, assets = { sprites: [], phot
   if (story.music !== undefined && story.music !== null && typeof story.music !== 'string') {
     add('', 'music must be a file path or null');
   }
+  if (story.sfx !== undefined && typeof story.sfx !== 'boolean') {
+    add('', `sfx must be true or false, got ${JSON.stringify(story.sfx)}`);
+  }
   const highlight = [];
   if (story.highlight !== undefined) {
     if (!Array.isArray(story.highlight)) {
@@ -348,6 +351,7 @@ export function validateStory(story, timing, brand, assets = { sprites: [], phot
     slug: story.slug,
     title: story.title,
     music: story.music ?? null,
+    sfx: story.sfx ?? true,
     width: W,
     height: H,
     fps: FPS,

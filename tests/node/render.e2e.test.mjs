@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, existsSync, statSync, chmodSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, chmodSync, readdirSync, copyFileSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
@@ -28,6 +28,37 @@ function addVoice(dir) {
   timing.estimated = false;
   writeJson(join(dir, 'timing.json'), timing);
   sineWav(join(dir, 'voice', 'voice.wav'), 3);
+}
+
+// ffmpeg's own readings of a media file's sound. `window` ([from, length] in seconds) limits it to a span.
+function listen(file, filter, window) {
+  const span = window ? ['-ss', String(window[0]), '-t', String(window[1])] : [];
+  const r = spawnSync('ffmpeg', ['-hide_banner', ...span, '-i', file, '-vn', '-af', filter, '-f', 'null', '-'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stderr;
+}
+
+const meanVolume = (file, window) => Number(/mean_volume: (-?[\d.]+) dB/.exec(listen(file, 'volumedetect', window))?.[1]);
+
+// {lufs, truePeak} over the whole file: the integrated loudness and the true peak that ebur128 reports.
+function loudness(file) {
+  const summary = listen(file, 'ebur128=peak=true').split('Summary:')[1];
+  return { lufs: Number(/I:\s+(-?[\d.]+) LUFS/.exec(summary)[1]), truePeak: Number(/Peak:\s+(-?[\d.]+) dBFS/.exec(summary)[1]) };
+}
+
+// Marks the timing as aligned and gives the project a 3 s synthesised voice at about -14 LUFS (what
+// prep_voice leaves), with a sine of the given peak so that a hot voice can test the limiter.
+function addLoudVoice(t, dir, { peak = null } = {}) {
+  const timing = readJson(join(dir, 'timing.json'));
+  timing.estimated = false;
+  writeJson(join(dir, 'timing.json'), timing);
+  const raw = join(tempDir(t, 'paim-voice'), 'raw.wav');
+  sineWav(raw, 3);
+  mkdirSync(join(dir, 'voice'), { recursive: true });
+  const measured = Number(/I:\s+(-?[\d.]+) LUFS/.exec(listen(raw, 'ebur128').split('Summary:')[1])[1]);
+  const gain = peak === null ? -14 - measured : peak - (-18.06); // the sine is 0.125 of full scale
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-af', `volume=${gain}dB`, '-ar', '48000', '-ac', '1', join(dir, 'voice', 'voice.wav')], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
 }
 
 // Opens the built page and runs `fn(page)`; the browser and server are closed on every path.
@@ -83,7 +114,7 @@ const near = (rgb, hex, tol = 12) => {
 
 const BRAND = { cream: '#FFFAF0', charcoal: '#252B31', green: '#14856D', orange: '#F5820B' };
 
-test('silent draft from estimated timing', SLOW, async (t) => {
+test('a draft carries the sound effects but no voice', SLOW, async (t) => {
   const dir = project(t);
   const r = await renderProject(dir, { preview: true });
   assert.match(r.file, /renders\/mini-draft\.mp4$/);
@@ -94,9 +125,38 @@ test('silent draft from estimated timing', SLOW, async (t) => {
     [1080, 1920, '30/1', 'yuv420p', 'h264'],
   );
   assert.ok(Math.abs(v.duration - 5.0) < 0.1);
-  assert.equal(v.audio, undefined);
+  assert.equal(v.audioStreams.length, 1);
+  assert.equal(v.audio.codec_name, 'aac');
+  assert.equal(Number(v.audio.sample_rate), 48000);
+  // The first item enters at 0.25 s: the 0.3 s after it is not silence, and the 0.2 s before it is.
+  const after = meanVolume(r.file, [0.25, 0.3]);
+  assert.ok(after > -60, `the first entrance makes no sound (mean ${after} dB)`);
+  assert.ok(after < -20, `the effects sit well below full scale (mean ${after} dB)`);
+  assert.ok(!(meanVolume(r.file, [0, 0.2]) > -60), 'nothing plays before the first entrance');
   assert.equal(ffprobe(r.previewFile).video.width, 720);
+  assert.equal(ffprobe(r.previewFile).audioStreams.length, 1, 'the preview keeps the sound');
   assert.match(r.previewFile, /renders\/mini-draft-preview\.mp4$/);
+});
+
+test('with sfx: false a draft has no audio stream', SLOW, async (t) => {
+  const dir = project(t);
+  const story = readJson(join(dir, 'story.json'));
+  story.sfx = false;
+  writeJson(join(dir, 'story.json'), story);
+  const r = await renderProject(dir, { preview: true });
+  assert.match(r.file, /renders\/mini-draft\.mp4$/);
+  assert.equal(ffprobe(r.file).audio, undefined);
+  assert.equal(ffprobe(r.previewFile).audio, undefined);
+});
+
+test('a final whose voice file is missing stays silent, so the missing voice is noticed', SLOW, async (t) => {
+  const dir = project(t);
+  const timing = readJson(join(dir, 'timing.json'));
+  timing.estimated = false;
+  writeJson(join(dir, 'timing.json'), timing);
+  const r = await renderProject(dir);
+  assert.match(r.file, /renders\/mini\.mp4$/);
+  assert.equal(ffprobe(r.file).audio, undefined);
 });
 
 test('final with voice', SLOW, async (t) => {
@@ -108,6 +168,35 @@ test('final with voice', SLOW, async (t) => {
   assert.equal(v.audio.codec_name, 'aac');
   assert.equal(Number(v.audio.sample_rate), 48000);
   assert.ok(Math.abs(v.duration - 5.0) < 0.1);
+});
+
+test('a final with voice and effects: -14 LUFS, true peak under -1 dBFS, the voice between effects untouched', SLOW, async (t) => {
+  const dir = project(t);
+  addLoudVoice(t, dir);
+  const withEffects = await renderProject(dir);
+  const plain = join(tempDir(t, 'paim-plain'), 'mini-sfx.mp4');
+  copyFileSync(withEffects.file, plain);
+  const heard = loudness(plain);
+  assert.ok(Math.abs(heard.lufs - -14) <= 1.5, `integrated loudness ${heard.lufs} LUFS`);
+  assert.ok(heard.truePeak <= -1, `true peak ${heard.truePeak} dBFS`);
+
+  const story = readJson(join(dir, 'story.json'));
+  story.sfx = false;
+  writeJson(join(dir, 'story.json'), story);
+  const without = await renderProject(dir);
+  // No effect plays between 0.45 s (the first pop ends at 0.37) and 1.55 s (the second starts at 1.6).
+  const a = meanVolume(plain, [0.6, 0.8]);
+  const b = meanVolume(without.file, [0.6, 0.8]);
+  assert.ok(Math.abs(a - b) <= 0.5, `voice-only window: ${a} dB with effects, ${b} dB without`);
+  assert.ok(Math.abs(loudness(without.file).lufs - heard.lufs) <= 1.5, 'the effects barely move the loudness');
+});
+
+test('a hot voice with effects on top is held under -1 dBFS true peak by the limiter', SLOW, async (t) => {
+  const dir = project(t);
+  addLoudVoice(t, dir, { peak: -0.3 });
+  const r = await renderProject(dir);
+  const heard = loudness(r.file);
+  assert.ok(heard.truePeak <= -1, `true peak ${heard.truePeak} dBFS`);
 });
 
 test('a --from/--to render is a silent part', SLOW, async (t) => {

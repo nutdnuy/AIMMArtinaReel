@@ -1,6 +1,6 @@
 ---
 name: paim-reel
-description: Makes a 9:16 P.AIM-branded finance explainer reel (MP4 with Thai captions, sticker sprites and icon motion) from a finance topic or from P.AIM's own voice recording. Use when asked "ทำ reel เรื่อง…", "ทำคลิปจากเสียงนี้" (with an audio file), "make a P.AIM short about…", or for any P.AIM short video, clip or reel about investing or personal finance. From a topic it writes the script, renders a silent draft and asks for the recording; from a voice recording it times the captions to the voice and renders the finished video. Also runs P.AIM's first-time setup (ตั้งค่า) and changes a setting when she says "ตั้งค่าใหม่" or "set up again".
+description: Makes a 9:16 P.AIM-branded finance explainer reel (MP4 with Thai captions, sticker sprites and icon motion) from a finance topic or from P.AIM's own voice recording. Use when asked "ทำ reel เรื่อง…", "ทำคลิปจากเสียงนี้" (with an audio file), "make a P.AIM short about…", or for any P.AIM short video, clip or reel about investing or personal finance. From a topic it writes the script, renders a draft (sound effects, no voice yet) and asks for the recording; from a voice recording it times the captions to the voice and renders the finished video. Also runs P.AIM's first-time setup (ตั้งค่า) and changes a setting when she says "ตั้งค่าใหม่" or "set up again".
 ---
 
 # paim-reel
@@ -157,9 +157,11 @@ run `timing.py align` again.
 `preview -> <file>`: `renders/<slug>.mp4` and `-preview.mp4`, or the `-draft` pair on estimated
 timing. Exit 2: a build problem; exit 1: read the ffmpeg message. Check the file with
 `ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate -of compact <file>`:
-video `h264`, `1080`×`1920`, `30/1`. A draft has no audio stream, which is correct. A final must
-also have audio `aac` at `48000`; if not, `voice/voice.wav` is missing: run step 4.1 and render
-again. Never deliver a silent file as a final.
+video `h264`, `1080`×`1920`, `30/1`. Sound effects are placed from the story on their own and
+are quiet under the voice; `story.sfx: false` turns them off. A draft carries only the effects,
+so it has one `aac` stream (none when `sfx` is false). A final must also have audio `aac` at
+`48000`; if not, `voice/voice.wav` is missing: run step 4.1 and render again. Never deliver a
+file without her voice as a final.
 
 ## 9. Deliver
 
