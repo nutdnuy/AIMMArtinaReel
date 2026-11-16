@@ -52,15 +52,26 @@ function place(node, rect) {
 
 const overflows = (box) => box.scrollHeight > box.clientHeight || box.scrollWidth > box.clientWidth;
 
-// Largest font size from `max` down to `min` (in FIT_STEP steps) at which neither the text nor
-// its `box` overflows. Call with no transform on the text: transforms count towards overflow.
-function fitFont(text, box, max, min) {
+// Neither the text nor its zone overflows. Call with no transform on the text: transforms
+// count towards overflow.
+const fitsZone = (text, zone) => () => !overflows(text) && !overflows(zone);
+
+// An item's pill or chip fits when it also lies inside the art area the label leaves. A flex:none
+// child taller than .art overflows it on both sides without making the item box overflow, so
+// compare layout sizes directly (offset/client sizes ignore the item's transform).
+const fitsArt = (text, art, box) => () => !overflows(text) && !overflows(box)
+  && text.offsetHeight <= art.clientHeight && text.offsetWidth <= art.clientWidth;
+
+// Largest font size from `max` down to `min` (in FIT_STEP steps) at which `fits()` holds.
+// Returns false when even `min` does not fit.
+function fitFont(text, fits, max, min) {
   let size = max;
   text.style.fontSize = `${size}px`;
-  while (size > min && (overflows(text) || overflows(box))) {
+  while (size > min && !fits()) {
     size -= FIT_STEP;
     text.style.fontSize = `${size}px`;
   }
+  return fits();
 }
 
 // ---------- build: one DOM tree for the whole reel, made once
@@ -97,24 +108,28 @@ function buildItem(item, parent, textColor) {
       addImage(el('div', 'art', box), '', `assets/sprites/${item.sprite}.png`);
       break;
     case 'pill': {
-      const pill = el('div', 'pill text', el('div', 'art', box), item.text);
+      const art = el('div', 'art', box);
+      const pill = el('div', 'pill text', art, item.text);
       pill.style.background = colorVar(item.bg);
       pill.style.color = colorVar(textColorOn(item.bg));
-      v.texts.push({ kind: 'pill', el: pill });
-      v.fit = () => fitFont(pill, box, 64, 32);
+      const entry = { kind: 'pill', el: pill, unfit: false };
+      v.texts.push(entry);
+      v.fit = () => { entry.unfit = !fitFont(pill, fitsArt(pill, art, box), 64, 32); };
       break;
     }
     case 'number': {
       // The figure sits on a chip of its colour, so the text is always an allowed pair.
-      const chip = el('div', 'number text', el('div', 'art', box));
+      const art = el('div', 'art', box);
+      const chip = el('div', 'number text', art);
       chip.style.background = colorVar(item.color);
       chip.style.color = colorVar(textColorOn(item.color));
       el('span', 'sizer', chip, numberAt(item, item.t));
       el('span', 'sizer', chip, numberAt(item, Infinity));
       const value = el('span', '', chip);
-      v.texts.push({ kind: 'number', el: chip, textOf: () => value.textContent });
+      const entry = { kind: 'number', el: chip, textOf: () => value.textContent, unfit: false };
+      v.texts.push(entry);
       v.update = (t) => { value.textContent = numberAt(item, t); };
-      v.fit = () => fitFont(chip, box, 140, 56);
+      v.fit = () => { entry.unfit = !fitFont(chip, fitsArt(chip, art, box), 140, 56); };
       break;
     }
     case 'bar': {
@@ -304,7 +319,7 @@ function drawScene(sv, t) {
     display(h.zone, on);
     if (on) {
       h.pill.style.transform = 'none';
-      fitFont(h.pill, h.zone, 96, 56);
+      fitFont(h.pill, fitsZone(h.pill, h.zone), 96, 56);
       const s = enterState('pop', progress(t, h.t, ENTER_DUR));
       h.pill.style.opacity = String(s.opacity);
       h.pill.style.transform = transformOf(s);
@@ -322,7 +337,7 @@ function drawCaption(cap, bg, t) {
   caption.classList.toggle('hl', cap.highlight);
   caption.style.color = cap.highlight ? '' : colorVar(textColorOn(bg));
   caption.style.transform = 'none';
-  fitFont(caption, zone, 84, 52);
+  fitFont(caption, fitsZone(caption, zone), 84, 52);
   const scale = cap.highlight ? 0.92 + 0.08 * progress(t, cap.t0, HIGHLIGHT_DUR) : 1;
   caption.style.transform = `scale(${scale})`;
   shown.push({ kind: 'caption', el: caption });
@@ -361,13 +376,14 @@ function seek(time) {
 
 function textBoxes() {
   const s = stage.getBoundingClientRect();
-  return shown.map(({ kind, el: node, textOf }) => {
+  return shown.map(({ kind, el: node, textOf, unfit }) => {
     const r = node.getBoundingClientRect();
     return {
       kind,
       text: textOf ? textOf() : node.textContent,
       rect: { x: r.left - s.left, y: r.top - s.top, w: r.width, h: r.height },
-      clipped: node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth,
+      // `unfit`: an item's pill or chip that does not fit its art area even at the minimum size.
+      clipped: node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth || unfit === true,
     };
   });
 }
@@ -385,16 +401,19 @@ function fontUsed() {
   return FALLBACK;
 }
 
+// One @font-face per weight, each from its own file: __PAIM_DATA.fallbackFontUrls {"400", "700"}.
 async function loadFallbackFont() {
-  const url = DATA.fallbackFontUrl;
-  if (!hasText(url)) throw new Error('__PAIM_DATA.fallbackFontUrl is missing');
-  const faces = ['400', '700'].map((weight) => new FontFace(FALLBACK, `url(${JSON.stringify(url)})`, { weight }));
-  for (const face of faces) document.fonts.add(face);
-  try {
-    await Promise.all(faces.map((face) => face.load()));
-  } catch {
-    throw new Error(`cannot load the fallback font ${url}`);
-  }
+  const urls = DATA.fallbackFontUrls ?? {};
+  const faces = ['400', '700'].map((weight) => {
+    const url = urls[weight];
+    if (!hasText(url)) throw new Error(`__PAIM_DATA.fallbackFontUrls["${weight}"] is missing`);
+    const face = new FontFace(FALLBACK, `url(${JSON.stringify(url)})`, { weight });
+    document.fonts.add(face);
+    return face.load().catch(() => {
+      throw new Error(`cannot load the fallback font ${url}`);
+    });
+  });
+  await Promise.all(faces);
 }
 
 async function start() {
