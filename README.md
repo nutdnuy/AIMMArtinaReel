@@ -49,6 +49,8 @@
 เอา repository นี้มาไว้ในเครื่อง (clone หรือดาวน์โหลด) แล้วเปิด Terminal ในโฟลเดอร์นั้น
 
 ```
+git clone https://github.com/nutdnuy/AIMMArtinaReel.git
+cd AIMMArtinaReel
 ./install.sh
 ```
 
@@ -216,6 +218,8 @@ Two ways to start:
 Get this repository onto your machine (clone or download) and open a terminal in its folder.
 
 ```
+git clone https://github.com/nutdnuy/AIMMArtinaReel.git
+cd AIMMArtinaReel
 ./install.sh
 ```
 
