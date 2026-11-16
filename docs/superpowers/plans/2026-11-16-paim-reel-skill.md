@@ -18,9 +18,9 @@
 - Fonts: `"Sukhumvit Set"` weight 700 for headlines and captions, weight 400 for body; fallback family `"IBM Plex Sans Thai"`. Never commit a Sukhumvit font file.
 - Canvas 1080×1920, 30 fps. Output H.264 yuv420p + AAC 48 kHz.
 - No third-party logos or brand marks in code, examples, tests or docs. Icon names ending `-logo` are refused.
-- Public repository: no secrets, no absolute `/Users/...` paths, no QuantCorner or Krungsri material, no recording of a real person's voice. Test audio is synthesised.
+- Public repository: no secrets, no absolute home-folder paths, no material from the owner's other projects or employers, no recording of a real person's voice. Test audio is synthesised.
 - Scripts never write inside the skill folder; all output goes to the project folder passed on the command line. Tests copy fixtures to a temp directory first.
-- During development never install into the real `~/.claude/skills` or `~/.codex/skills`; use `install.sh --home <temp dir>`. Registering the skill on Nuth's own machine is a separate decision (his skills are sourced from the vault).
+- During development never install into the real `~/.claude/skills` or `~/.codex/skills`; use `install.sh --home <temp dir>`. Registering the skill on the owner's own machine is a separate decision.
 - Python runs as `skills/paim-reel/.venv/bin/python`. Python 3.10–3.12 only (faster-whisper wheels). Scripts import their sibling modules, so they are run by path, never with `-I`.
 - Code comments, file names, docs and `SKILL.md` in English; README has Thai and English install sections; example script content in Thai.
 - Every commit message ends with `Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>`.
@@ -28,9 +28,9 @@
 - Under Claude Code an image CLI is mandatory: `doctor.sh --agent claude` reports `MISSING image-cli` until the profile names `codex` or `gemini` and that command is on `PATH`. Under `--agent codex` the provider is `codex` and no choice is asked. No silent fallback to icons.
 - Automated tests never call a real image CLI; they point `PAIM_IMAGE_CMD` at `tests/fixtures/fake_image_cli.py`. Real calls are opt-in (`PAIM_RUN_IMAGE=1`).
 - The agent never types or stores a password, API key or login code; the user signs in to Codex or Gemini in her own terminal.
-- Voice recordings and scripts never leave the machine. Only sprite object descriptions go to the image provider.
+- Privacy, as built: the voice file and its speech-to-text stay on this machine; the assistant the user is chatting with reads the script and transcript text; only short object descriptions go to the drawing tool; fact and photo searches go to the web. (The first draft of this plan said recordings and scripts never leave the machine; that was wrong, because the assistant reads the script.)
 - Chroma-key colour is magenta `#FF00FF`; a green key would remove brand green.
-- Publishing to GitHub (Task 11, last step) needs Nuth's explicit go-ahead at that moment.
+- Publishing to GitHub (Task 11, last step) needs the owner's explicit go-ahead at that moment.
 
 ## Review Focus
 
@@ -101,7 +101,7 @@ Profile  {version:1, onboarded_at:str|null, display_name:"พี่เอม", h
 ### Task 1: Repository scaffold, brand tokens, profile, doctor, installer
 
 **Files:**
-- Create: `.gitignore`, `LICENSE` (MIT, holder "Nuth Danai" — confirm with Nuth), `requirements-dev.txt`, `install.sh`
+- Create: `.gitignore`, `LICENSE` (MIT, holder "P.AIM Reel Skill contributors" until the owner names one), `requirements-dev.txt`, `install.sh`
 - Create: `skills/paim-reel/{package.json,requirements.txt,brand.json}`, `skills/paim-reel/lib/brand.mjs`, `skills/paim-reel/lib/profile.mjs`, `skills/paim-reel/scripts/profile.mjs`, `skills/paim-reel/scripts/doctor.sh`
 - Move: the spec and this plan into `docs/superpowers/`
 - Test: `tests/node/brand.test.mjs`, `tests/node/profile.test.mjs`, `tests/node/install.test.mjs`
@@ -299,7 +299,7 @@ def test_prep_missing_file_raises(…)  # VoiceError naming the path
 ```
 
 - [ ] **Step 2: Run** — Expected: FAIL.
-- [ ] **Step 3: Implement `prep_voice.py`** with ffmpeg called through `subprocess` with list arguments (never a shell string, so spaces and Thai names survive): downmix to mono 48 kHz, trim head/tail silence leaving 0.25 s lead-in, shorten pauses longer than 0.60 s to 0.45 s (threshold −45 dB), then `loudnorm` to −14 LUFS with true peak −1 dBFS followed by a limiter. Raise `VoiceError("no speech …")` when less than 1.0 s remains.
+- [ ] **Step 3: Implement `prep_voice.py`** with ffmpeg called through `subprocess` with list arguments (never a shell string, so spaces and Thai names survive): downmix to mono 48 kHz, trim head/tail silence leaving 0.25 s lead-in, shorten any pause longer than 0.45 s to 0.45 s (threshold −45 dB; as built, a single ffmpeg `silenceremove` pass cannot express a two-threshold rule), trim trailing silence to 0.15 s, then `loudnorm` to −14 LUFS with true peak −1 dBFS followed by a limiter. Raise `VoiceError("no speech …")` when less than 1.0 s remains.
 - [ ] **Step 4: Run** — Expected: PASS.
 
 - [ ] **Step 5: Write failing transcribe tests**
@@ -458,7 +458,7 @@ ASK = ("Use your image generation tool to create ONE square image, {size}. Then 
        "current directory as {filename}. Do nothing else.\n\nImage prompt: {subject}. {style}")
 ```
 
-Commands (verified against `codex-cli 0.157` and `gemini 0.67` on 2026-11-16): codex → `["codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", str(folder), ask]`; gemini → `["gemini", "-p", ask, "--yolo"]` run with `cwd=folder`. When env `PAIM_IMAGE_CMD` or `profile["image_cmd"]` is set (env wins), the command is `shlex.split(that) + ["-p", ask]` with `cwd=folder`, whatever the provider. Always `stdin=subprocess.DEVNULL` (a CLI that reads stdin swallows the rest of a batch).
+Commands (verified against `codex-cli 0.157` and `gemini 0.67` on 2026-11-16): codex → `["codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", str(folder), ask]`; gemini → `["gemini", "-p", ask, "--yolo", "--skip-trust"]` run with `cwd=folder` (as built: without `--skip-trust` the Gemini CLI switches YOLO off in a folder it does not trust, so it could not save the image; and free personal Google accounts are refused by the Gemini CLI itself, so they are served by the Antigravity CLI, `agy`, set as `image_cmd`). When env `PAIM_IMAGE_CMD` or `profile["image_cmd"]` is set (env wins), the command is `shlex.split(that) + ["-p", ask]` with `cwd=folder`, whatever the provider. Always `stdin=subprocess.DEVNULL` (a CLI that reads stdin swallows the rest of a batch).
 
 `generate` behaviour: run the command with stdout and stderr to `<folder>/<stem>.log`; then wait up to `wait` seconds for the file, polling every 2 s, because Gemini hands drawing to a sub-agent and the file can appear after the command returns. Log containing `RESOURCE_EXHAUSTED`, `QUOTA_EXHAUSTED` or `usage limit` → `QuotaError` at once, no retry. Log containing `429` and no file → retry, at most 3 attempts, sleeping `attempt × PAIM_IMAGE_BACKOFF` seconds (default 45). Command not found → `ImageCliError` whose message contains the provider's install line (`npm install -g @openai/codex` / `npm install -g @google/gemini-cli`). No file after `wait` → `ImageCliError` naming the log path.
 
@@ -499,7 +499,7 @@ def test_off_palette(…):              # a blue #2040FF disc -> on_palette < 0.
 ```python
 def test_commands_exact():
     assert build_command("codex", "A", Path("/p")) == ["codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "-C", "/p", "A"]
-    assert build_command("gemini", "A", Path("/p")) == ["gemini", "-p", "A", "--yolo"]
+    assert build_command("gemini", "A", Path("/p")) == ["gemini", "-p", "A", "--yolo", "--skip-trust"]
     # with PAIM_IMAGE_CMD="agy --dangerously-skip-permissions": ["agy", "--dangerously-skip-permissions", "-p", "A"]
 def test_resolve_provider():
     assert resolve_provider(None, "codex") == "codex"
@@ -527,7 +527,7 @@ def test_real_provider_draws(…):      # image_cli.py test for the provider in 
 
 - [ ] **Step 6: Run** — Expected: FAIL. **Step 7: Implement `image_cli.py` and `gen_sprites.py`** (a thread pool of `--parallel` workers; default 2).
 - [ ] **Step 8: Run** `…/python -m pytest tests/py -v` — Expected: PASS.
-- [ ] **Step 9: Real smoke, both providers, once each.** With Nuth's own signed-in CLIs: `PAIM_RUN_IMAGE=1` and a temp profile set to `codex`, then to `gemini`. Look at both stickers. If the Gemini CLI returns no image (it may need an image extension), record exactly what it printed, make `image_cli.py test` turn that into the sentence "Gemini CLI on this machine cannot draw yet: <what to do>", and note the finding for `references/onboarding.md` (Task 10). Do not paper over it.
+- [ ] **Step 9: Real smoke, both providers, once each.** With the owner's own signed-in CLIs: `PAIM_RUN_IMAGE=1` and a temp profile set to `codex`, then to `gemini`. Look at both stickers. If the Gemini CLI returns no image (it may need an image extension), record exactly what it printed, make `image_cli.py test` turn that into the sentence "Gemini CLI on this machine cannot draw yet: <what to do>", and note the finding for `references/onboarding.md` (Task 10). Do not paper over it.
 - [ ] **Step 10: Commit** — `feat: image CLI adapter, magenta keying and sprite generation`.
 
 ---
@@ -541,7 +541,7 @@ def test_real_provider_draws(…):      # image_cli.py test for the provider in 
 **Interfaces:**
 - Consumes: `Resolved`, layout constants, `captionAt`.
 - Produces `engine/motion.mjs`: `ENTER_DUR=0.40`, `EXIT_DUR=0.20`; `enterState(kind: string, p: number): {opacity, dx, dy, scale, rot}`; `idleState(kind: string, tSince: number, seed: number): {dx, dy, scale, rot}`; `itemState(item, t: number): {visible: boolean, opacity, dx, dy, scale, rot}`; `progress(t, t0, dur): number` (clamped 0..1); `numberAt(item, t): string` (count-up over 0.8 s from `item.t`, formatted with `decimals`, `prefix`, `suffix`); `barAt(item, t): number` (0 → `value` over 0.6 s).
-- Produces in the page: `window.__paim = { ready: Promise<void>, duration: number, seek(t: number): void, fontUsed(): string, textBoxes(): Array<{kind:'caption'|'headline'|'label'|'pill'|'number'|'endcard', text, rect: Rect, clipped: boolean}> }`. The page reads its data from `window.__PAIM_DATA = {resolved, brand, icons: {name: svg}, fallbackFontUrl, forceFallback?: boolean}`.
+- Produces in the page: `window.__paim = { ready: Promise<void>, duration: number, seek(t: number): void, fontUsed(): string, textBoxes(): Array<{kind:'caption'|'headline'|'label'|'pill'|'number'|'endcard', text, rect: Rect, clipped: boolean}> }`. The page reads its data from `window.__PAIM_DATA = {resolved, brand, icons: {"name:weight": svg}, fallbackFontUrls: {"400": [{url, unicodeRange}], "700": [{url, unicodeRange}]}, forceFallback?: boolean}` (as built: one font file per weight, each with its Thai and Latin subsets; icons are keyed by name and weight).
 
 Motion values (start state at `p = 0`; all end at identity; opacity reaches 1 at `p = 0.4`): `pop` scale 0 with back-overshoot (peaks above 1), `drop` dy −420, `slide-l` dx −520, `slide-r` dx +520, `rise` dy +260, `fade` opacity only. Idle: `bob` dy = 10·sin(2π·t/2.4 + seed), `sway` rot = 3°·sin(2π·t/3.0 + seed), `pulse` scale = 1 + 0.04·sin(2π·t/1.6 + seed).
 
@@ -576,13 +576,13 @@ test('barAt', …);   // 0 before t, value at t + 0.6
   - `seek(t)` rebuilds the whole frame from `t` alone: no CSS animations or transitions, no timers, no `Date`, no `Math.random`.
   - Stage is a fixed 1080×1920 element. Cream scenes draw a grid of 108 px cells in charcoal at 6% opacity; charcoal scenes draw it in cream at 6%.
   - Type: headline 96 px/700 on an orange pill (charcoal text); caption 84 px/700, `line-height: 1.4`, centred in `CAPTION`, text colour `textColorOn(scene bg)`, highlighted caption on an orange pill with charcoal text, scale 0.92 → 1 over 0.12 s; item label 52 px/700 under the icon; number 140 px/700; end-card handle and disclaimer 40 px/400.
-  - Font stack on every text element: `"Sukhumvit Set", "IBM Plex Sans Thai", sans-serif`; the fallback is declared with `@font-face` from `fallbackFontUrl` (weights 400 and 700). `ready` resolves after `document.fonts.ready`.
+  - Font stack on every text element: `"Sukhumvit Set", "IBM Plex Sans Thai", sans-serif`; the fallback is declared with `@font-face` from `fallbackFontUrls`, one set of files per weight (400 and 700), each with its Thai and Latin subsets. `ready` resolves after `document.fonts.ready`.
   - `fontUsed()` returns `"Sukhumvit Set"` or `"IBM Plex Sans Thai"` by comparing measured text width against a `monospace`-only baseline; when `__PAIM_DATA.forceFallback` is true the stack omits Sukhumvit Set.
   - Icons are the inlined SVG with `fill` set to the brand colour; item box = its `rect`, transformed by `itemState`.
   - Sprites are `<img src="assets/sprites/<name>.png">` fitted inside the item `rect` (contain, centred), with the label under it like an icon's. `ready` also waits for every image to decode.
   - Marks: `arrow` is an SVG path between the two item rect edges drawn on over 0.3 s (charcoal on cream, cream on charcoal); `ring` an orange ellipse stroke drawn on over 0.3 s; `cross` two strokes in the scene's text colour.
   - End card (`t ≥ endCard.t0`): green background, `ติดตาม` 120 px/700 in cream, then handle, logo and disclaimer when set.
-  - When `resolved.estimated`, draw `DRAFT · ยังไม่มีเสียง` at 40 px in the top safe area on every frame.
+  - When `resolved.estimated`, draw `DRAFT · ยังไม่มีเสียงพูด` at 40 px at y 130-200 (above the headline zone) on every frame (as built after the sound effects were added: a draft has effects but no voice).
   - `textBoxes()` reports each visible text element's bounding rect in canvas px and `clipped = scrollHeight > clientHeight || scrollWidth > clientWidth`.
 
 - [ ] **Step 5: Commit** — `feat: deterministic motion functions and page runtime`.
@@ -604,7 +604,7 @@ test('barAt', …);   // 0 before t, value at t + 0.6
 
 Decisions: the page is served over HTTP because Chromium blocks ES-module imports from `file://`. Frames are JPEG quality 92 piped to one ffmpeg process (`-f image2pipe -framerate 30`), encoded `libx264 -crf 18 -pix_fmt yuv420p -movflags +faststart`. Audio is `<project>/voice/voice.wav` when it exists and the timing is not estimated, as AAC 192 kb/s 48 kHz; `story.music` (a path relative to the project) is mixed 30 dB below the voice and faded out over the end card. Output name: `renders/<slug>.mp4`, or `renders/<slug>-draft.mp4` when estimated; `--preview` adds a 720×1280 `-crf 26` copy named `…-preview.mp4`. A `--from/--to` render writes `renders/<slug>-part.mp4` without audio.
 
-- [ ] **Step 1: Write the failing build test** — copy `tests/fixtures/mini` to a temp dir; `buildProject` returns `resolved.duration === 5.0`; `build/index.html`, `build/data.js`, `build/resolved.json`, `build/engine/runtime.mjs` exist; `data.js` contains both icon SVGs and no path starting with `/Users/`; a story with an unknown icon rejects with `StoryError`; a project without `timing.json` rejects with a message naming `timing.py`; a `story.music` path that does not exist rejects with a message naming that path; a story with a `sprite` item builds when `gen/sprites/basket.png` exists (the file is copied to `build/assets/sprites/`) and rejects with `StoryError` naming `gen_sprites.py` when it does not; with a profile whose `handle` is `@test`, `resolved.endCard.handle === '@test'`.
+- [ ] **Step 1: Write the failing build test** — copy `tests/fixtures/mini` to a temp dir; `buildProject` returns `resolved.duration === 5.0`; `build/index.html`, `build/data.js`, `build/resolved.json`, `build/engine/runtime.mjs` exist; `data.js` contains both icon SVGs and no absolute home-folder path; a story with an unknown icon rejects with `StoryError`; a project without `timing.json` rejects with a message naming `timing.py`; a `story.music` path that does not exist rejects with a message naming that path; a story with a `sprite` item builds when `gen/sprites/basket.png` exists (the file is copied to `build/assets/sprites/`) and rejects with `StoryError` naming `gen_sprites.py` when it does not; with a profile whose `handle` is `@test`, `resolved.endCard.handle === '@test'`.
 
 - [ ] **Step 2: Write the failing end-to-end test** (`render.e2e.test.mjs`, 120 s timeout)
 
@@ -702,9 +702,9 @@ test('CLI exit code', …);                   // 0 on mini, 1 on the right-ui va
 - Consumes: every CLI from Tasks 1–8, exactly as named there.
 - Produces: the skill an agent loads. Frontmatter `name: paim-reel`; `description` states what it makes and when to use it, with Thai and English trigger phrases ("ทำคลิปจากเสียงนี้", "ทำ reel เรื่อง…", "make a P.AIM short about…"), under 1024 characters.
 
-- [ ] **Step 1: Write the failing structural test** — `SKILL.md` frontmatter parses, `name === 'paim-reel'`, description length ≤ 1024 and mentions both a topic and a voice recording; body ≤ 200 lines; every `scripts/…` and `references/…` path mentioned in `SKILL.md` exists; no `/Users/` and no `QuantCorner` anywhere under `skills/`; the example validates (`estimate` its script through the Python CLI in a temp copy, then `buildProject` and `checkProject` pass with zero findings); the example uses at least 4 scenes, both scene backgrounds, at least 4 `sprite` items whose PNGs are committed (each under 400 KB, PNG colour type 6 = RGBA), at least one `number` with a `source`, and `highlight`.
+- [ ] **Step 1: Write the failing structural test** — `SKILL.md` frontmatter parses, `name === 'paim-reel'`, description length ≤ 1024 and mentions both a topic and a voice recording; body ≤ 200 lines; every `scripts/…` and `references/…` path mentioned in `SKILL.md` exists; no absolute home-folder path and no other project's name anywhere under `skills/`; the example validates (`estimate` its script through the Python CLI in a temp copy, then `buildProject` and `checkProject` pass with zero findings); the example uses at least 4 scenes, both scene backgrounds, at least 4 `sprite` items whose PNGs are committed (each under 400 KB, PNG colour type 6 = RGBA), at least one `number` with a `source`, and `highlight`.
 
-- [ ] **Step 2: Write the example.** `examples/etf-vs-stock/script.md`: 10–12 Thai lines, about 35 s, on the difference between buying one stock and buying an ETF; phrases of at most 14 base characters; no company names; one sourced figure. `story.json`: opens with a `versus` scene, something new at least every 3 s, orange for the subject of each line, green for growth or the safer option, ends on a takeaway scene. `sprites.tsv`: 4–6 generic objects (a shopping basket, a stack of coins, an office building, a piggy bank, a rising bar chart); generate them once with a real provider (`gen_sprites.py`, Nuth's signed-in CLI), look at each, regenerate any that is off-brand or carries text, and commit the keyed PNGs (not the `-raw` files).
+- [ ] **Step 2: Write the example.** `examples/etf-vs-stock/script.md`: 10–12 Thai lines, about 35 s, on the difference between buying one stock and buying an ETF; phrases of at most 14 base characters; no company names; one sourced figure. `story.json`: opens with a `versus` scene, something new at least every 3 s, orange for the subject of each line, green for growth or the safer option, ends on a takeaway scene. `sprites.tsv`: 4–6 generic objects (a shopping basket, a stack of coins, an office building, a piggy bank, a rising bar chart); generate them once with a real provider (`gen_sprites.py`, the owner's signed-in CLI), look at each, regenerate any that is off-brand or carries text, and commit the keyed PNGs (not the `-raw` files).
 
 - [ ] **Step 3: Write the three references.**
   - `brand.md`: the colour table and roles, the four text pairs and why (contrast figures from the spec), type sizes from Task 6, the zones from Task 4, the font note (system font on macOS, fallback elsewhere, never bundled), the no-logo rule.
@@ -716,7 +716,7 @@ test('CLI exit code', …);                   // 0 on mini, 1 on the right-ui va
   1. Make a project folder beside the audio or in the working directory; never inside the skill.
   2. Route: audio file given → voice mode; otherwise topic mode.
   3. Topic mode: `brief.md` → `script.md` (read `references/script-style.md`; write for the profile's `audience` in its `tone`) → fact-check figures on the web → `timing.py estimate` → story (step 6) → build, check, `render.mjs --preview` → send the draft and the read-aloud sheet; say plainly that the timing is estimated and the voice is still needed.
-  4. Voice mode: `prep_voice.py` → `transcribe.py` → when there is no `script.md`, correct `script.draft.md` into it (spelling and phrase spaces only) → `timing.py align`.
+  4. Voice mode: `prep_voice.py` → `transcribe.py` → when there is no `script.md`, correct `script.draft.md` into `script.proposed.md` (spelling and phrase spaces only; a word that cannot be read is written `[?]`, never guessed), show it to the user and **stop** until she confirms or fixes it, then write `script.md` → `timing.py align` (as built: `timing.py` exits 2 while any `[?]` remains).
   5. If `align` exits 2 or prints `LOW` lines: show P.AIM those lines and ask whether to change the script to what was said or to re-record; do not render.
   6. Sprites and story: read `references/story-json.md`. List the objects the script names in `sprites.tsv` (generic objects only; 4–8 per reel; reuse one sprite in several scenes) and run `gen_sprites.py`. Look at every sprite; delete and regenerate one that has text, a logo, a wrong colour or an `OFF-PALETTE` line. On `QUOTA`, stop and tell P.AIM when to retry; use `icon` items instead only if she says so. Then write `story.json`: one scene per idea; the sprite is the thing the line names; highlight the one phrase per line that carries the point.
   7. `build.mjs` → `check.mjs` until every line says PASS → `still.mjs` at the middle of every scene; look at the sheet and fix covered or crowded frames.
@@ -749,13 +749,13 @@ test('CLI exit code', …);                   // 0 on mini, 1 on the right-ui va
 1. **Rules.** Speak Thai; address her by `display_name` (default `พี่เอม`). One question per message. Say what a thing does, not what it is called: "โปรแกรมช่วยวาดภาพ" after the first mention, not "CLI". Announce each install (what, why, rough size) and wait for a yes. Save each answer immediately with `profile.mjs set`. Never ask for, type or store a password, key or login code. Run `profile.mjs show` first and ask only for what is still empty, so an interrupted setup resumes.
 2. **Welcome.** Three sentences: what the skill makes, that setup takes about ten minutes, what she needs (this Mac, and a ChatGPT or a Google account).
 3. **Machine check.** `doctor.sh --agent <agent>`; for each `MISSING` line a one-sentence plain explanation and, after a yes, `install.sh`. Missing Sukhumvit Set is explained, not treated as a failure.
-4. **Picture helper (Claude Code only; skipped under Codex).** Explain why it is needed (Claude cannot draw) and offer the two choices with what each needs: Codex CLI — a ChatGPT account; Gemini CLI — a Google account. Whatever Task 5 Step 9 found about either one is stated here. After her choice: install (`npm install -g @openai/codex` or `npm install -g @google/gemini-cli`), then she signs in herself in her own terminal (`codex login`, or start `gemini` and follow its sign-in); the agent waits. Then `profile.mjs set image_cli <choice>` and `image_cli.py test`; show her the sticker. On failure: the plain sentence from the tool, then offer to retry or to choose the other one. This step cannot be skipped under Claude Code.
+4. **Picture helper (Claude Code only; skipped under Codex).** Explain why it is needed (Claude cannot draw) and offer the two choices with what each needs: Codex CLI — a ChatGPT account (the tested and recommended route); the Google route — a personal Google account through the Antigravity CLI, or the Gemini CLI only for an organisation-paid account or an existing API key (as built). Whatever Task 5 Step 9 found about either one is stated here. After her choice: install (`npm install -g @openai/codex` or `npm install -g @google/gemini-cli`), then she signs in herself in her own terminal (`codex login`, or start `gemini` and follow its sign-in); the agent waits. Then `profile.mjs set image_cli <choice>` and `image_cli.py test`; show her the sticker. On failure: the plain sentence from the tool, then offer to retry or to choose the other one. This step cannot be skipped under Claude Code.
 5. **Brand details.** Channel handle; logo file (optional; copied to `<config dir>/assets/logo.png` and that path saved); disclaimer line for the end card (optional; suggest "ไม่ใช่คำแนะนำการลงทุน"); who the audience is, in one sentence; tone, as a choice (เป็นกันเอง / สุภาพเป็นทางการ / สนุกกระชับ); where to keep reels (default `~/Movies/paim-reels`). Tell her the colours and fonts are fixed by the brand.
 6. **First clip.** Copy the bundled example into `<projects_dir>/example`, run `timing.py estimate`, `build.mjs`, `render.mjs --preview`, and show her the draft. Say that this one is silent because no voice has been recorded yet.
 7. **Recording guide and cheat sheet.** Show `cheatsheet-th.md`, then `profile.mjs done --agent <agent>`.
 8. **Set up again.** Ask which part to change; change only that. `profile.mjs reset --yes` only after she explicitly asks to start from zero.
 
-`cheatsheet-th.md`, one page in Thai for P.AIM: the two sentences that start a reel ("ทำ reel เรื่อง …" and "ทำคลิปจากเสียงนี้" with the file attached); how to record (Voice Memos on the phone, a quiet room, the phone 15–20 cm away, read the sheet as written, one take, send the `.m4a`); what comes back (a draft, then the finished MP4 and a preview); what to say to change something ("เปลี่ยนภาพฉากที่ 3", "ตั้งค่าใหม่"); what never leaves the machine (her voice and script) and what does (short object descriptions for drawing).
+`cheatsheet-th.md`, one page in Thai for P.AIM: the two sentences that start a reel ("ทำ reel เรื่อง …" and "ทำคลิปจากเสียงนี้" with the file attached); how to record (Voice Memos on the phone, a quiet room, the phone 15–20 cm away, read the sheet as written, one take, send the `.m4a`); what comes back (a draft, then the finished MP4 and a preview); what to say to change something ("เปลี่ยนภาพฉากที่ 3", "ตั้งค่าใหม่"); what stays on the machine (her voice file and its speech-to-text) and what does not (the assistant reads the script text; short object descriptions go to the drawing tool; fact and photo searches go to the web).
 
 - [ ] **Step 1: Write the failing structural test** — `onboarding.md` names every `Profile` key except `version` and `onboarded_at`; contains both install commands, `codex login`, `image_cli.py test`, `profile.mjs done`, and a sentence matching `/never .*(password|key)/i`; its eight sections appear in the order above; `cheatsheet-th.md` has at least 300 Thai characters, both trigger sentences, and no word `CLI`; `SKILL.md` step 0 mentions `references/onboarding.md`, and its description contains `ตั้งค่า`.
 - [ ] **Step 2: Run** `node --test tests/node/onboarding.test.mjs` — Expected: FAIL.
@@ -779,7 +779,7 @@ test('CLI exit code', …);                   // 0 on mini, 1 on the right-ui va
 - Consumes: `install.sh`, `doctor.sh`, the example.
 - Produces: a repository a stranger can clone, install and run.
 
-- [ ] **Step 1: Write the failing release test** — over `git ls-files`: no file matches `\.(ttc|ttf|otf|wav|m4a|mp3|mp4|mov)$`; no file contains `/Users/`, `QuantCorner`, `Krungsri`, or a match for `(api[_-]?key|secret|token)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}`; no file is larger than 3 MB; `LICENSE` and `THIRD_PARTY_NOTICES.md` exist and the notices name Phosphor Icons (MIT), IBM Plex Sans Thai (OFL-1.1), Playwright (Apache-2.0), faster-whisper (MIT), Pillow (MIT-CMU) and state that Sukhumvit Set is not included and that the example sprites were generated with an image model for this project; `README.md` has both a `## ติดตั้ง` and a `## Install` section and both contain `./install.sh`.
+- [ ] **Step 1: Write the failing release test** — over `git ls-files`: no file matches `\.(ttc|ttf|otf|wav|m4a|mp3|mp4|mov)$`; no file contains an absolute home-folder path, the name of another project, a bank or the owner, or a match for `(api[_-]?key|secret|token)\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}`; no file is larger than 3 MB; `LICENSE` and `THIRD_PARTY_NOTICES.md` exist and the notices name Phosphor Icons (MIT), IBM Plex Sans Thai (OFL-1.1), Playwright (Apache-2.0), faster-whisper (MIT), Pillow (MIT-CMU) and state that Sukhumvit Set is not included and that the example sprites were generated with an image model for this project; `README.md` has both a `## ติดตั้ง` and a `## Install` section and both contain `./install.sh`.
 
 - [ ] **Step 2: Write `THIRD_PARTY_NOTICES.md` and `README.md`.** README order: what it makes (with `docs/preview.gif`), requirements (including: under Claude Code, Codex CLI or Gemini CLI is required and why), install for Claude Code and for Codex, what the first-run setup asks, first reel in both modes (the two sentences a user types), what is sent to the image provider and what never leaves the machine, how to re-brand (`brand.json`), the font note, what version 1 does not do (spec §9), licence. Thai section first, English second, same content.
 
@@ -788,11 +788,13 @@ test('CLI exit code', …);                   // 0 on mini, 1 on the right-ui va
 - [ ] **Step 5: Codex install check.** `./install.sh --home <tmp> --codex`; assert the link; start Codex with `HOME=<tmp>` and confirm `paim-reel` appears in its skill list. If Codex needs a different folder or an `AGENTS.md` pointer, fix `install.sh` and the README, and add the case to `install.test.mjs`.
 - [ ] **Step 6: Fresh-clone check.** `git clone` the local repo into a temp dir, run `./install.sh --home <tmp2>`, `doctor.sh`, then run the fake-CLI onboarding acceptance (Task 10 Step 4) against the clone, then build, check and render the example draft there — Expected: an MP4, with no step reaching outside the clone.
 - [ ] **Step 7: Commit** — `docs: README, third-party notices and release audit`.
-- [ ] **Step 8: STOP — ask Nuth before publishing.** Show him: final repository and skill names, the licence holder name, the GitHub owner, `git ls-files`, and the release-test output. Only on his explicit yes:
+- [ ] **Step 8: STOP — ask the owner before publishing.** Show the owner: final repository and skill names, the licence holder name, the GitHub owner, `git ls-files`, and the release-test output. Only on an explicit yes:
 
 ```bash
 gh repo create <owner>/paim-reel-skill --public --source . --remote origin --push
 ```
+
+As built (Task 11): Step 1's media rule allows the six generated sound effects, the example sprites, the example photo and `docs/preview.gif`; it also runs `make_sfx.py --check` and reads the example photo's credits entry. Step 5 only checked the link under a temporary home; Codex itself was not started. Step 6 cloned, installed, ran `doctor.sh`, `timing.py estimate`, `build.mjs`, `check.mjs` and a draft render of the example, with no onboarding acceptance (the owner cancelled it). Step 8 was not run by the builder: nothing was pushed or created on GitHub.
 
 Then confirm the repository page loads and the README renders.
 
@@ -802,14 +804,14 @@ Then confirm the repository page loads and the README renders.
 
 # Addendum A (2026-11-16, after Task 10 was written) — paper look, web photos, sound effects, OpenFilm
 
-Nuth asked for four additions while the plan was running. They are Tasks 12-16 below.
+The owner asked for four additions while the plan was running. They are Tasks 12-16 below.
 Execution order from here: finish Task 10's review → 12 → 13 → 14 → 15 → 16 → 11 → final review.
 Task 10's acceptance runs (its Steps 4-7) move into Task 16, because Tasks 12-15 change what onboarding and the cheat sheet must say.
 
-Decisions taken with Nuth (2026-11-16):
-- Paper: a handmade-paper texture and torn paper edges, like his two reference pictures (reference only; nothing from them is copied).
+Decisions taken with the owner (2026-11-16):
+- Paper: a handmade-paper texture and torn paper edges, like two reference pictures the owner chose (reference only; nothing from them is copied).
 - Pictures: web photos are used together with drawn sprites; the agent chooses per scene (real things → photo, ideas → sprite).
-- Photo sources: general web image search (his choice, made after being told that most web images are copyrighted).
+- Photo sources: general web image search (the owner's choice, made after being told that most web images are copyrighted).
 - OpenFilm (github.com/openfilm/openfilm, MIT): the finished reel is exported as an OpenFilm project and opened in Studio so P.AIM can change it by hand. Our own renderer still makes the MP4.
 - Sound effects: a small set, shipped in the repository.
 
@@ -853,7 +855,7 @@ Look, exact:
 - [ ] **Step 2: Run** `node --test tests/node/paper.test.mjs` — Expected: FAIL. **Step 3: Implement `paper.mjs`.** Run — Expected: PASS.
 - [ ] **Step 4: Write failing e2e tests** — two separate page loads of the mini fixture give byte-identical screenshots at t = 1.0; the mean of a 40×40 patch at (20, 20) is within 10 of cream at 2.6 s and of green at 4.5 s (replace the old single-pixel checks); a scene with `frame: 'orange'` shows orange at (10, 960) and paper at (540, 960); `seek(1.0) → seek(2.5) → seek(1.0)` is still pixel-identical; an unknown `frame` value is a `StoryError`.
 - [ ] **Step 5: Implement the texture and `frame` in `runtime.mjs` / `style.css` / `story.mjs`.** Run the whole Node suite — Expected: PASS. `check.mjs` still passes on `mini`, `thai-marks` and the example.
-- [ ] **Step 6: Look.** Render stills of the example with `still.mjs --scenes`; Read them next to Nuth's two reference pictures (`.superpowers/sdd/2026-11-16-paim-reel-skill/refs/`). The paper should read as handmade paper at phone size without competing with captions. Save before/after sheets to `task-12-smoke/`.
+- [ ] **Step 6: Look.** Render stills of the example with `still.mjs --scenes`; Read them next to the owner's two reference pictures (kept outside the repository). The paper should read as handmade paper at phone size without competing with captions. Save before/after sheets to `task-12-smoke/`.
 - [ ] **Step 7: Update `brand.md` and `story-json.md`; commit** — `feat: handmade-paper texture and torn-edge frames`.
 
 ---
@@ -945,10 +947,24 @@ Requirements:
 
 ---
 
-## Open items for Nuth (do not block Tasks 1–10)
+## Open items for the owner (do not block Tasks 1–10)
 
 - Final repository and skill names (working: `paim-reel-skill`, `paim-reel`).
 - P.AIM's handle, logo and disclaimer are now collected by onboarding on her machine. Say so if they should instead be baked into `brand.json` as repository defaults.
 - Which provider (Codex or Gemini) draws the example sprites that get committed, and which one onboarding should present first.
 - Licence holder name on `LICENSE`, and which GitHub account or organisation owns the repository.
-- Whether to also register the skill on Nuth's own machine through the vault.
+- Whether to also register the skill on the owner's own machine.
+
+---
+
+## Changes during implementation
+
+The plan above is kept as written. Where building it showed a statement to be wrong or incomplete, the line was corrected in place and marked "as built". The full list is in the spec, section 13 ("Changes during implementation"). In short:
+
+- Privacy: not "recordings and scripts never leave the machine", but four parts: the voice file and its speech-to-text stay on this machine; the assistant reads the script text; short object descriptions go to the drawing tool; fact and photo searches go to the web.
+- Pauses: any pause longer than 0.45 s is shortened to 0.45 s; trailing silence is trimmed to 0.15 s.
+- Voice mode with no script: the corrected text goes to `script.proposed.md`, the agent stops for the user's confirmation, unreadable words stay `[?]`.
+- Image tools: the Gemini command carries `--skip-trust`; free and paid personal Google accounts are served by the Antigravity CLI; Codex is the recommended route.
+- Fonts and icons: `fallbackFontUrls` per weight with Thai and Latin subsets; icons keyed `name:weight`.
+- Drafts carry sound effects, and the banner reads `DRAFT · ยังไม่มีเสียงพูด`.
+- Added after the plan was written: the handmade-paper look, web photos with a credits file, generated sound effects, the OpenFilm hand-off (finished reels only), larger layout geometry, number grouping, single-line pills, and `still.mjs --scenes`.

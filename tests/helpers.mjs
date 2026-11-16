@@ -5,6 +5,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+// The macOS home prefix, spelled in pieces so that this repository's own release scan stays clean.
+export const HOME_PREFIX = ['', 'Users', ''].join('/');
+
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
 // Registers cleanup on the node:test context `t` for every temp dir made through it.

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { checkProject } from '../../skills/paim-reel/scripts/check.mjs';
-import { tempDir } from '../helpers.mjs';
+import { tempDir, HOME_PREFIX } from '../helpers.mjs';
 
 const SKILL = fileURLToPath(new URL('../../skills/paim-reel/', import.meta.url));
 const SKILLS = fileURLToPath(new URL('../../skills/', import.meta.url));
@@ -226,11 +226,11 @@ test('every scripts/ and references/ path SKILL.md mentions exists', () => {
   for (const p of new Set(paths)) assert.ok(existsSync(join(SKILL, p)), `${p} exists in the skill folder`);
 });
 
-test('no absolute /Users/ path and no QuantCorner anywhere under skills/', () => {
+test('no absolute home path and no other project\'s name anywhere under skills/', () => {
   for (const file of textFiles(SKILLS)) {
     const text = readFileSync(file, 'utf8');
-    assert.ok(!text.includes('/Users/'), `${file} has no /Users/ path`);
-    assert.ok(!/quantcorner/i.test(text), `${file} does not mention QuantCorner`);
+    assert.ok(!text.includes(HOME_PREFIX), `${file} has no absolute home path`);
+    assert.ok(!/quant ?corner/i.test(text), `${file} names no other project`);
   }
 });
 

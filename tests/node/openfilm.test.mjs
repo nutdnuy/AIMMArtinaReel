@@ -13,7 +13,7 @@ import { exportOpenfilm } from '../../skills/paim-reel/scripts/export_openfilm.m
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { sfxEvents } from '../../skills/paim-reel/lib/sfx.mjs';
-import { copyFixture, tempDir, sineWav } from '../helpers.mjs';
+import { copyFixture, tempDir, sineWav, HOME_PREFIX } from '../helpers.mjs';
 import { withExportPages, evaluate, closeAll, within } from '../openfilm-helpers.mjs';
 
 const SKILL = fileURLToPath(new URL('../../skills/paim-reel/', import.meta.url));
@@ -151,7 +151,7 @@ test('every src film.html and the pages name exists in openfilm/, and nothing na
     if (!/\.(html|js|mjs|css|json)$/.test(file)) continue;
     const text = readFileSync(file, 'utf8');
     for (const root of roots) assert.ok(!text.includes(root), `${relative(r.dir, file)} does not contain ${root}`);
-    assert.ok(!text.includes('/Users/') && !text.includes('file:'), `${relative(r.dir, file)} has no absolute path`);
+    assert.ok(!text.includes(HOME_PREFIX) && !text.includes('file:'), `${relative(r.dir, file)} has no absolute path`);
   }
 });
 

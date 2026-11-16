@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { StoryError } from '../../skills/paim-reel/lib/story.mjs';
 import { saveProfile } from '../../skills/paim-reel/lib/profile.mjs';
-import { copyFixture, tempDir, solidPng, addPhoto } from '../helpers.mjs';
+import { copyFixture, tempDir, solidPng, addPhoto, HOME_PREFIX } from '../helpers.mjs';
 
 // Every test works on a fixture copy and an empty profile folder.
 function project(t) {
@@ -29,7 +29,7 @@ test('mini builds into build/', async (t) => {
   assert.match(data, /^window\.__PAIM_DATA = /);
   assert.match(data, /<svg/);
   assert.ok(data.includes('"buildings:fill"') && data.includes('"basket:fill"'), 'both icons are in data.js');
-  assert.ok(!data.includes('/Users/'), 'data.js holds no absolute home path');
+  assert.ok(!data.includes(HOME_PREFIX), 'data.js holds no absolute home path');
   assert.deepEqual(JSON.parse(readFileSync(join(buildDir, 'resolved.json'), 'utf8')), resolved);
 });
 
@@ -162,7 +162,7 @@ test('a used photo is copied into build/assets/photos and no absolute path reach
   assert.deepEqual([item.photo, item.treatment], ['old-bank', 'mono']);
   const data = readFileSync(join(buildDir, 'data.js'), 'utf8');
   assert.ok(data.includes('"photo":"old-bank"'));
-  assert.ok(!data.includes(dir) && !data.includes('/Users/') && !data.includes('credits.json'), 'data.js names no folder of the project');
+  assert.ok(!data.includes(dir) && !data.includes(HOME_PREFIX) && !data.includes('credits.json'), 'data.js names no folder of the project');
   assert.ok(!/https?:\/\/page\.example/.test(data), 'the credits do not travel into the page');
 });
 
