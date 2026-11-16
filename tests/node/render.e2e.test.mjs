@@ -333,6 +333,15 @@ test('a story whose photo has lost its credits entry does not render', async (t)
   await assert.rejects(renderProject(dir), (e) => e instanceof StoryError && /old-bank/.test(e.message));
 });
 
+test('stills refuse a story whose photo has lost its credits entry, like build and render', SLOW, async (t) => {
+  const dir = photoScene(t, [photoItem('p')]);
+  writeJson(join(dir, 'gen', 'photos', 'credits.json'), []);
+  const out = join(tempDir(t), 'sheet.png');
+  await assert.rejects(stills(dir, 'scenes', out), (e) => e instanceof StoryError && /old-bank/.test(e.message));
+  await assert.rejects(stills(dir, [1], out), (e) => e instanceof StoryError && /old-bank/.test(e.message));
+  assert.equal(existsSync(out), false);
+});
+
 test('music bed is accepted', SLOW, async (t) => {
   const dir = project(t);
   addVoice(dir);

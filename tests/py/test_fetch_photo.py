@@ -362,7 +362,8 @@ def test_a_failed_fetch_leaves_the_earlier_photo_and_entry_alone(project, site):
     bad = site.put("/b.html", b"<html></html>", "text/html")
     assert fetch(project, "bank", bad).returncode == 2
     assert ((project / "gen" / "photos" / "bank.jpg").read_bytes(), credits(project)) == before
-    assert sorted(p.name for p in (project / "gen" / "photos").iterdir()) == ["bank.jpg", "credits.json"]
+    left = sorted(p.name for p in (project / "gen" / "photos").iterdir() if p.name != ".credits.lock")
+    assert left == ["bank.jpg", "credits.json"], "no temp file is left behind"
 
 
 def test_a_damaged_credits_file_is_not_overwritten(project, site):
@@ -379,3 +380,115 @@ def test_a_damaged_credits_file_is_not_overwritten(project, site):
 def test_a_very_long_licence_text_is_refused(project, site):
     url = site.put("/a.jpg", encode(picture(), "JPEG"))
     refused(fetch(project, "bank", url, "--license", "x" * 600), project, "--license")
+
+
+# ---------- fix round 1: parallel fetches, an all-or-nothing write, public addresses only, a smaller pixel cap
+
+def start(project, name, url, env=None):
+    e = {k: v for k, v in os.environ.items()}
+    e.update({"PAIM_ALLOW_HTTP_LOCAL": "1", "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"})
+    e.update(env or {})
+    return subprocess.Popen([sys.executable, str(FETCH), str(project), name, url, "--page", PAGE], env=e,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+
+def test_parallel_fetches_all_keep_their_entries(project, site):
+    def slow(h):
+        time.sleep(1)
+        body = encode(picture((1000, 800)), "JPEG")
+        h.send_response(200)
+        h.send_header("Content-Type", "image/jpeg")
+        h.send_header("Content-Length", str(len(body)))
+        h.end_headers()
+        h.wfile.write(body)
+    site.routes["/slow.jpg"] = slow
+    names = ["aa", "bb", "cc", "dd", "ee", "ff"]
+    procs = {n: start(project, n, site.base + "/slow.jpg") for n in names}
+    results = {n: p.communicate(timeout=60) + (p.returncode,) for n, p in procs.items()}
+    for n, (out, err, code) in results.items():
+        assert code == 0 and out.startswith(f"OK {n} "), (n, out, err)
+    assert [e["name"] for e in credits(project)] == names
+    assert sorted(p.name for p in (project / "gen" / "photos").glob("*.jpg")) == [f"{n}.jpg" for n in names]
+    assert sorted(p.name for p in (project / "gen" / "photos").iterdir() if p.name != ".credits.lock") \
+        == sorted([f"{n}.jpg" for n in names] + ["credits.json"]), "no temp file is left behind"
+
+
+def failed_to_save(r):
+    assert r.returncode == 1, r.stdout + r.stderr
+    message = r.stderr.strip()
+    assert message and "\n" not in message and "Traceback" not in message, message
+    assert "could not save" in message
+
+
+def test_a_write_failure_is_one_sentence_not_a_traceback(project, site):
+    (project / "gen").write_text("a file where the folder should be", encoding="utf-8")
+    url = site.put("/a.jpg", encode(picture(), "JPEG"))
+    failed_to_save(fetch(project, "bank", url))
+
+
+def test_if_the_picture_cannot_be_saved_the_old_source_stays_with_the_old_picture(project, site):
+    first = site.put("/a.jpg", encode(picture((1200, 900), 1), "JPEG"))
+    assert fetch(project, "coin", first, "--license", "CC0").returncode == 0
+    folder = project / "gen" / "photos"
+    before = (folder / "credits.json").read_bytes()
+    (folder / "bank.jpg").mkdir()   # the picture cannot be written here
+    failed_to_save(fetch(project, "bank", first))
+    assert (folder / "credits.json").read_bytes() == before, "no entry for a picture that was not saved"
+    assert [p.name for p in folder.iterdir() if p.name not in (".credits.lock", "bank.jpg", "credits.json", "coin.jpg")] == []
+
+
+def test_if_the_entry_cannot_be_saved_the_old_picture_is_untouched(project, site):
+    folder = project / "gen" / "photos"
+    folder.mkdir(parents=True)
+    (folder / "bank.jpg").write_bytes(b"the old picture")
+    (folder / "credits.json").mkdir()   # the record cannot be written here
+    url = site.put("/a.jpg", encode(picture(), "JPEG"))
+    r = fetch(project, "bank", url)
+    assert r.returncode in (1, 2) and "Traceback" not in r.stderr
+    assert (folder / "bank.jpg").read_bytes() == b"the old picture"
+
+
+@pytest.mark.parametrize("url", [
+    "https://127.0.0.1:1/x.jpg", "https://localhost/x.jpg", "https://[::1]/x.jpg", "https://10.0.0.5/x.jpg",
+    "https://192.168.1.20/x.jpg", "https://169.254.169.254/latest/", "https://0.0.0.0/x.jpg",
+    "https://224.0.0.1/x.jpg", "https://[::ffff:127.0.0.1]/x.jpg", "https://[fe80::1]/x.jpg",
+])
+def test_an_https_url_to_a_local_or_private_address_is_refused(project, url):
+    started = time.monotonic()
+    refused(fetch(project, "bank", url), project, "private or local address")
+    assert time.monotonic() - started < 10
+
+
+def test_the_page_url_must_be_public_too(project, site):
+    url = site.put("/a.jpg", encode(picture(), "JPEG"))
+    r = run(project, "bank", url, "--page", "https://192.168.0.7/page")
+    refused(r, project, "page URL", "private or local address")
+    assert site.hits == []
+
+
+def test_a_redirect_to_a_private_address_is_refused(project, site):
+    site.routes["/go.jpg"] = lambda h: (h.send_response(302), h.send_header("Location", "https://10.1.2.3/x.jpg"),
+                                        h.send_header("Content-Length", "0"), h.end_headers())
+    started = time.monotonic()
+    refused(fetch(project, "bank", site.base + "/go.jpg"), project, "redirect target", "private or local address")
+    assert time.monotonic() - started < 10
+
+
+def test_a_picture_with_too_many_pixels_is_refused_whatever_its_file_size(project, site):
+    big = Image.new("L", (7000, 7000), 128)   # 49 M pixels, a few KB as a PNG
+    data = encode(big, "PNG")
+    assert len(data) < 200_000
+    refused(fetch(project, "bank", site.put("/big.png", data, "image/png")), project, "7000x7000", "too large")
+
+
+def test_a_large_jpeg_is_decoded_at_a_reduced_size_and_still_comes_out_right(project, site):
+    url = site.put("/huge.jpg", encode(picture((4000, 3600)), "JPEG"))
+    r = fetch(project, "bank", url)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "OK bank 1600x1440 license=unknown"
+
+
+def test_an_unresolvable_https_host_is_reported_as_unreachable_not_a_crash(project):
+    r = fetch(project, "bank", "https://no-such-host.invalid/x.jpg")
+    assert r.returncode == 1 and "could not download" in r.stderr and "Traceback" not in r.stderr
+    assert nothing_written(project)

@@ -11,25 +11,30 @@ license=<...>`.
 
 Refused (exit 2, nothing written, one sentence on stderr): a name outside a-z, 0-9 and -; an image or page
 URL that is not https:// (PAIM_ALLOW_HTTP_LOCAL=1 also allows http://127.0.0.1, for tests); a redirect to
-anything but https://; an HTTP error status; a response that is not image/jpeg, image/png or image/webp, or
+anything but https://; an https:// host that is a loopback, private, link-local or other non-public address
+(checked for the image URL, the page URL and every redirect hop, and again when connecting); an HTTP error status; a response that is not image/jpeg, image/png or image/webp, or
 whose bytes do not decode as one of those (an SVG never does); more than 15 MB; a short side under 600 px;
 a download that takes longer than 30 s (PAIM_FETCH_TIMEOUT sets another number of seconds, for tests).
 Exit 1: the server could not be reached.
 """
 import argparse
+import fcntl
 import hashlib
+import http.client
 import io
+import ipaddress
 import json
 import os
 import re
+import socket
 import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 import warnings
 from datetime import datetime, timezone
-from http.client import HTTPException
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -42,7 +47,7 @@ ACCEPT = "image/jpeg, image/png, image/webp"
 TYPES = ("image/jpeg", "image/png", "image/webp")
 FORMATS = ("JPEG", "PNG", "WEBP")
 MAX_BYTES = 15 * 1024 * 1024
-MAX_PIXELS = 80_000_000
+MAX_PIXELS = 40_000_000
 MIN_SHORT = 600
 MAX_SIDE = 1600
 QUALITY = 88
@@ -68,6 +73,30 @@ def timeout() -> float:
         return 30.0
 
 
+def non_public(address: str) -> bool:
+    """True for an address that is not on the public internet (loopback, private, link-local, unspecified,
+    multicast, reserved, shared, documentation)."""
+    ip = ipaddress.ip_address(address.split("%")[0])
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return not ip.is_global or ip.is_multicast or ip.is_reserved or ip.is_loopback or ip.is_link_local
+
+
+def check_host(host: str, what: str) -> None:
+    """Refuse a host that is, or resolves to, a non-public address. A name that does not resolve is left to
+    the connection, which fails on its own."""
+    try:
+        addresses = [host]
+        ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            addresses = [info[4][0] for info in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)]
+        except OSError:
+            return
+    if any(non_public(a) for a in addresses):
+        raise Refused(f"the {what} points at {host}, a private or local address: only public web addresses are fetched")
+
+
 def check_url(url: str, what: str) -> None:
     """Refuse anything but https:// (and, for tests only, http://127.0.0.1)."""
     try:
@@ -80,6 +109,27 @@ def check_url(url: str, what: str) -> None:
         raise Refused(f"the {what} must start with https:// ({url[:80]})")
     if parts.username or parts.password:
         raise Refused(f"the {what} must not contain a user name or password")
+    if not local:
+        check_host(host, what)
+
+
+def public_connection(address, timeout, source_address=None):
+    """socket.create_connection that connects only to a public address it has checked itself, so a name
+    that resolves differently a moment later cannot lead to a local one."""
+    host, port = address
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    for info in infos:
+        check_host(info[4][0], "server")
+    return socket.create_connection((infos[0][4][0], port), timeout, source_address)
+
+
+class PublicHTTPSConnection(http.client.HTTPSConnection):
+    _create_connection = staticmethod(public_connection)
+
+
+class PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(PublicHTTPSConnection, req, context=self._context)
 
 
 class HttpsOnly(urllib.request.HTTPRedirectHandler):
@@ -109,7 +159,7 @@ def get(url: str) -> bytes:
     ascii_url = urllib.parse.quote(url, safe="%/:?&=#+@!$'()*,;~[]")
     request = urllib.request.Request(ascii_url, headers={"User-Agent": USER_AGENT, "Accept": ACCEPT})
     try:
-        with urllib.request.build_opener(HttpsOnly).open(request, timeout=timeout()) as resp:
+        with urllib.request.build_opener(HttpsOnly, PublicHTTPSHandler).open(request, timeout=timeout()) as resp:
             kind = resp.headers.get_content_type()
             if kind not in TYPES:
                 raise Refused(f"the server sent {kind}, not an image/jpeg, image/png or image/webp picture")
@@ -119,7 +169,7 @@ def get(url: str) -> bytes:
             return read_capped(resp)
     except urllib.error.HTTPError as e:
         raise Refused(f"the server answered {e.code} {e.reason}, not a picture") from None
-    except (urllib.error.URLError, HTTPException, OSError) as e:
+    except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
         raise Unreachable(f"could not download the picture ({getattr(e, 'reason', e)})") from None
 
 
@@ -150,6 +200,8 @@ def prepare(data: bytes) -> bytes:
         img = Image.open(io.BytesIO(data), formats=FORMATS)
         if img.width * img.height > MAX_PIXELS:
             raise Refused(f"the picture is {img.width}x{img.height} px, far too large to use")
+        if img.format == "JPEG":
+            img.draft("RGB", (MAX_SIDE, MAX_SIDE))   # decode at a reduced scale, never below the output size
         img.load()
         img = ImageOps.exif_transpose(img)
     except Refused:
@@ -179,22 +231,41 @@ def one_line(text: str, flag: str) -> str:
     return text
 
 
-def write_all(folder: Path, name: str, jpeg: bytes, entries: "list[dict]") -> None:
-    """Both files are written aside first and then moved into place, so a failure leaves the old ones."""
+def aside(folder: Path, body: bytes) -> Path:
+    """`body` in a new file of its own name in `folder`, to be moved into place."""
+    with tempfile.NamedTemporaryFile(dir=folder, prefix=".", suffix=".tmp", delete=False) as f:
+        f.write(body)
+    return Path(f.name)
+
+
+def save(project: Path, name: str, jpeg: bytes, entry: dict) -> None:
+    """Records the photo and its entry together. Under an exclusive lock the entries are read again (another
+    fetch may have finished while this one downloaded), the record is moved into place first and the picture
+    second; if the picture cannot be moved the old record is put back, so a picture never has another
+    picture's source."""
+    folder = credits_file(project).parent
     folder.mkdir(parents=True, exist_ok=True)
-    jobs = [(folder / f"{name}.jpg", jpeg),
-            (folder / "credits.json", (json.dumps(entries, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))]
-    aside = []
-    try:
-        for target, body in jobs:
-            tmp = target.with_name(f".{target.name}.tmp")
-            tmp.write_bytes(body)
-            aside.append((tmp, target))
-        for tmp, target in aside:
-            os.replace(tmp, target)
-    finally:
-        for tmp, _ in aside:
-            tmp.unlink(missing_ok=True)
+    record, picture = folder / "credits.json", folder / f"{name}.jpg"
+    with open(folder / ".credits.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entries = sorted([e for e in load_entries(project) if e["name"] != name] + [entry], key=lambda e: e["name"])
+        old = record.read_bytes() if record.is_file() else None
+        temps = [aside(folder, (json.dumps(entries, indent=2, ensure_ascii=False) + "\n").encode("utf-8")),
+                 aside(folder, jpeg)]
+        try:
+            os.replace(temps[0], record)
+            try:
+                os.replace(temps[1], picture)
+            except OSError:
+                if old is None:
+                    record.unlink(missing_ok=True)
+                else:
+                    restore = aside(folder, old)
+                    os.replace(restore, record)
+                raise
+        finally:
+            for tmp in temps:
+                tmp.unlink(missing_ok=True)
 
 
 def run(project: Path, name: str, image_url: str, page_url: str, license_text: str, credit: str) -> int:
@@ -207,7 +278,7 @@ def run(project: Path, name: str, image_url: str, page_url: str, license_text: s
         credit = one_line(credit, "--credit")
         if not project.is_dir():
             raise Refused(f"the project folder {project} was not found")
-        earlier = [e for e in load_entries(project) if e["name"] != name]
+        load_entries(project)   # a damaged record is refused before anything is downloaded
         jpeg = prepare(download(image_url))
     except (Refused, CreditsError) as e:
         print(" ".join(str(e).split()), file=sys.stderr)
@@ -221,8 +292,14 @@ def run(project: Path, name: str, image_url: str, page_url: str, license_text: s
         "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "sha256": hashlib.sha256(jpeg).hexdigest(), "width": width, "height": height,
     }
-    entries = sorted(earlier + [entry], key=lambda e: e["name"])
-    write_all(credits_file(project).parent, name, jpeg, entries)
+    try:
+        save(project, name, jpeg, entry)
+    except CreditsError as e:
+        print(" ".join(str(e).split()), file=sys.stderr)
+        return 2
+    except OSError as e:
+        print(f"could not save the photo ({e.strerror or e})", file=sys.stderr)
+        return 1
     print(f"OK {name} {width}x{height} license={license_text}")
     return 0
 
