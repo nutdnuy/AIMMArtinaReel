@@ -42,9 +42,9 @@
       ]
     },
     {
-      "id": "set50", "from": "l07", "layout": "row", "headline": {"text": "ดัชนี SET50"},
+      "id": "set50", "from": "l07", "layout": "row", "headline": {"text": "ดัชนีหุ้นใหญ่ของไทย"},
       "items": [
-        {"id": "index", "type": "sprite", "sprite": "basket", "label": "SET50", "at": "l07", "idle": "bob"},
+        {"id": "index", "type": "sprite", "sprite": "basket", "label": "ดัชนีหุ้นใหญ่", "at": "l07", "idle": "bob"},
         {"id": "count", "type": "number", "to": 50, "color": "orange", "label": "หุ้นใหญ่", "at": "l07@2",
          "source": "SET50 index profile, The Stock Exchange of Thailand: \"50 large-market capitalization securities with high trading liquidity\". https://www.set.or.th/en/market/index/set50/profile (accessed 2026-11-16)"}
       ],
