@@ -1,6 +1,6 @@
 ---
 name: paim-reel
-description: Makes a 9:16 P.AIM-branded finance explainer reel (MP4 with Thai captions, sticker sprites and icon motion) from a finance topic or from P.AIM's own voice recording. Use when asked "ทำ reel เรื่อง…", "ทำคลิปจากเสียงนี้" (with an audio file), "make a P.AIM short about…", or for any P.AIM short video, clip or reel about investing or personal finance. From a topic it writes the script, renders a silent draft and asks for the recording; from a voice recording it times the captions to the voice and renders the finished video.
+description: Makes a 9:16 P.AIM-branded finance explainer reel (MP4 with Thai captions, sticker sprites and icon motion) from a finance topic or from P.AIM's own voice recording. Use when asked "ทำ reel เรื่อง…", "ทำคลิปจากเสียงนี้" (with an audio file), "make a P.AIM short about…", or for any P.AIM short video, clip or reel about investing or personal finance. From a topic it writes the script, renders a silent draft and asks for the recording; from a voice recording it times the captions to the voice and renders the finished video. Also runs P.AIM's first-time setup (ตั้งค่า) and changes a setting when she says "ตั้งค่าใหม่" or "set up again".
 ---
 
 # paim-reel
@@ -23,11 +23,15 @@ said or for facts.
 `<skill>/scripts/doctor.sh --agent claude` under Claude Code, `--agent codex` under Codex.
 
 - Exit 0: go on. Note the `font:` line for the delivery note.
-- `MISSING …`: stop, tell P.AIM what is missing and how it is fixed, and wait. `node` → Node 20
-  or newer; `ffmpeg`/`ffprobe` → `brew install ffmpeg`; `playwright` or `python packages` → the
-  repository's `install.sh` (`<skill>/../../install.sh`); `chromium` → `npx playwright install
-  chromium` in `<skill>`; `image-cli` → re-run setup.
-- `onboarding: needed`: stop and tell P.AIM that setup has not been finished yet.
+- `onboarding: needed` or `MISSING image-cli …`: read `references/onboarding.md` and do that
+  setup with her before any reel work (it resumes an interrupted setup and fixes the other
+  `MISSING` lines too).
+- Any other `MISSING …`: stop, tell P.AIM what is missing and how it is fixed, and wait. `node` →
+  Node 20 or newer; `ffmpeg`/`ffprobe` → `brew install ffmpeg`; `playwright` or `python packages`
+  → the repository's `install.sh` (`<skill>/../../install.sh`); `chromium` → `npx playwright
+  install chromium` in `<skill>`.
+- She says "ตั้งค่าใหม่" / "set up again", or asks to change a setting: `references/onboarding.md`
+  section 8.
 
 ## 1. Project folder and slug
 
@@ -44,7 +48,8 @@ speech. Empty `handle` / `disclaimer` → the end card shows neither (say so whe
 ## 2. Route
 
 Audio or video file given → voice mode (step 4). Otherwise → topic mode (step 3). A project with
-a draft's `script.md` and `story.json` plus a new recording → voice mode, keeping both files.
+a draft's `script.md` and `story.json` plus a new recording → voice mode, keeping both files. A
+project with `script.proposed.md` and no `script.md` → voice mode (step 4), with or without a file.
 
 ## 3. Topic mode, in this order
 
@@ -62,6 +67,10 @@ a draft's `script.md` and `story.json` plus a new recording → voice mode, keep
    **Stop.** When the recording arrives, continue at step 4 in the same `<project>`.
 
 ## 4. Voice mode
+
+First: `script.proposed.md` exists and `script.md` does not → skip 4.1–4.2 (the voice is already
+prepared and transcribed). If her message is her answer to that proposal, apply it as in 4.3 and
+continue at 4.4; otherwise go straight to the pending-confirmation stop in 4.3.
 
 1. `<skill>/.venv/bin/python <skill>/scripts/prep_voice.py <audio> <project>` →
    `voice/voice.wav` (mono 48 kHz, 0.25 s lead-in, pauses over 0.45 s cut to 0.45 s, end
@@ -113,9 +122,10 @@ run `timing.py align` again.
    - Exit 0: all drawn. Exit 1: on each `FAIL`, read the last lines of that log before deciding
      what went wrong; then run again with `--only <name>` (drawn sprites are skipped).
    - Exit 2: a bad `sprites.tsv` line (the message names it: fix it), or `No image CLI is chosen
-     yet` / `The image command … is not installed`: re-run setup. If drawing keeps failing, run
-     `<skill>/.venv/bin/python <skill>/scripts/image_cli.py test` (same `--agent`); its exit 2
-     sentence says why the tool cannot draw: tell P.AIM that sentence and re-run setup.
+     yet` / `The image command … is not installed`: do section 4 of `references/onboarding.md`.
+     If drawing keeps failing, run `<skill>/.venv/bin/python <skill>/scripts/image_cli.py test`
+     (same `--agent`); its exit 2 sentence says why the tool cannot draw: tell P.AIM that
+     sentence in plain Thai and do section 4 of `references/onboarding.md`.
    - Exit 3 `QUOTA`: stop; the drawing quota is used up, try later. Use `icon` items instead only
      if P.AIM says so.
 3. Open every `gen/sprites/<name>.png`. Redraw (`rm` it, then `--only <name>`; at most twice) one
