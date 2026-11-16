@@ -2,35 +2,41 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, chmodSync, realpathSync, mkdtempSync,
+  openSync, closeSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { exportOpenfilm } from '../../skills/paim-reel/scripts/export_openfilm.mjs';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
-import { openPage, serveFolder } from '../../skills/paim-reel/lib/serve.mjs';
+import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { sfxEvents } from '../../skills/paim-reel/lib/sfx.mjs';
 import { copyFixture, tempDir, sineWav } from '../helpers.mjs';
+import { withExportPages, evaluate, closeAll, within } from '../openfilm-helpers.mjs';
 
 const SKILL = fileURLToPath(new URL('../../skills/paim-reel/', import.meta.url));
 const EXPORT_CLI = join(SKILL, 'scripts', 'export_openfilm.mjs');
 const OPEN_STUDIO = join(SKILL, 'scripts', 'open_studio.sh');
 const DOCTOR = join(SKILL, 'scripts', 'doctor.sh');
-// playwright lives in the skill's own node_modules, not in the repository root
-const { chromium } = createRequire(join(SKILL, 'package.json'))('playwright');
+const HELPERS = fileURLToPath(new URL('../openfilm-helpers.mjs', import.meta.url));
+const RUN_MS = 60_000; // every child process a test starts is given at most this long
 const SLOW = { timeout: 180_000 };
 const REAL = process.env.PAIM_RUN_OPENFILM === '1';
 
 // ---- helpers -----------------------------------------------------------------------------------
 
-// The mini fixture (one scene s1, 0 to 3 s, then the 2 s end card). `story` may edit the story;
-// `voice` writes a 3 s voice file the way prep_voice.py leaves it.
-function project(t, { story: edit, voice = true } = {}) {
+// The mini fixture (one scene s1, 0 to 3 s, then the 2 s end card) as a FINAL reel: its timing says it was aligned
+// to a recording (the fixture's own timing is an estimate) and `voice/voice.wav` is a 3 s sine. `draft: true`
+// keeps the estimated timing. `story` may edit the story.
+function project(t, { story: edit, voice = true, draft = false } = {}) {
   process.env.PAIM_CONFIG_DIR = tempDir(t, 'paim-config');
   const dir = copyFixture(t, 'mini');
+  if (!draft) {
+    const file = join(dir, 'timing.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), estimated: false }));
+  }
   if (voice) sineWav(join(dir, 'voice', 'voice.wav'), 3);
   if (edit) {
     const file = join(dir, 'story.json');
@@ -231,67 +237,105 @@ test('a scene page at frame(0.5) draws exactly what our page draws at sceneStart
   const starts = [...resolved.scenes.map((s) => s.t0), resolved.endCard.t0];
   assert.equal(pages.length, starts.length);
 
-  const ours = await openPage(dir);
-  const server = await serveFolder(r.dir);
-  let browser = null;
+  let ours = null;
   try {
-    browser = await chromium.launch();
-    const pngs = [];
-    for (let i = 0; i < pages.length; i++) {
-      await ours.page.evaluate((s) => window.__paim.seek(s), starts[i] + 0.5);
-      const expected = await ours.page.screenshot({ type: 'png' });
+    ours = await openPage(dir);
+    await withExportPages(r.dir, async ({ open }) => {
+      const pngs = [];
+      for (let i = 0; i < pages.length; i++) {
+        const { page, errors, duration } = await open(pages[i]);
+        assert.ok(duration > 0, `${pages[i]} says how long it is`);
+        // Chromium does not always rasterise one picture to the very same bytes twice (OpenFilm's SPEC says so
+        // too), so a differing pair is drawn and compared again; a real difference (another scene, another time)
+        // stays different every time.
+        let expected;
+        let got;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await evaluate(ours.page, (s) => window.__paim.seek(s), starts[i] + 0.5);
+          expected = await ours.page.screenshot({ type: 'png' });
+          await evaluate(page, (s) => window.film.frame(s), 0.5);
+          got = await page.screenshot({ type: 'png' });
+          if (Buffer.compare(expected, got) === 0) break;
+        }
+        assert.deepEqual(errors, [], `${pages[i]} has no page error`);
+        assert.ok(Buffer.compare(expected, got) === 0, `${pages[i]}: frame(0.5) is the picture at ${starts[i] + 0.5} s`);
+        pngs.push(got);
 
-      const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-      const errors = [];
-      page.on('pageerror', (e) => errors.push(e.message));
-      await page.goto(`${server.url}${pages[i]}`, { waitUntil: 'load' });
-      const length = await page.evaluate(async () => { await window.film.ready; return window.film.duration; });
-      assert.ok(length > 0, `${pages[i]} says how long it is`);
-      await page.evaluate((s) => window.film.frame(s), 0.5);
-      const got = await page.screenshot({ type: 'png' });
-      assert.deepEqual(errors, [], `${pages[i]} has no page error`);
-      assert.ok(Buffer.compare(expected, got) === 0, `${pages[i]}: frame(0.5) is the picture at ${starts[i] + 0.5} s`);
-      pngs.push(got);
-
-      // a frame is a function of t: drawn after another time, and again, it is the same
-      await page.evaluate(() => { window.film.frame(0.1); window.film.frame(0.9); });
-      await page.evaluate((s) => window.film.frame(s), 0.5);
-      assert.ok(Buffer.compare(got, await page.screenshot({ type: 'png' })) === 0, `${pages[i]}: the same t draws the same picture`);
-      await page.close();
-    }
-    assert.ok(Buffer.compare(pngs[0], pngs[1]) !== 0, 'the scenes really differ, so the comparison means something');
+        // a frame is a function of t: drawn after other times, and again, the page is in the very same state
+        // (every element's class, text and inline style with the declarations in sorted order: the order in
+        // which a style was set is history, the values are not)
+        const state = () => evaluate(page, () => [...document.getElementById('stage').querySelectorAll('*')].map((el) => [
+          el.tagName, el.getAttribute('class'), el.children.length === 0 ? el.textContent : '',
+          (el.getAttribute('style') ?? '').split(';').map((d) => d.trim()).filter(Boolean).sort().join(';'),
+        ].join('|')).join('\n'));
+        const first = await state();
+        await evaluate(page, () => { window.film.frame(0.1); window.film.frame(0.9); });
+        await evaluate(page, (s) => window.film.frame(s), 0.5);
+        assert.equal(await state(), first, `${pages[i]}: the same t draws the same picture`);
+        await page.close();
+      }
+      assert.ok(Buffer.compare(pngs[0], pngs[1]) !== 0, 'the scenes really differ, so the comparison means something');
+    });
   } finally {
-    await browser?.close();
-    await server.close();
-    await ours.close();
+    await closeAll(ours);
   }
 });
 
 test('a scene page does not run into the next scene past its own length', SLOW, async (t) => {
   const dir = project(t, { story: twoScenes });
   const r = await exportOpenfilm(dir);
-  const film = readFilm(r.dir);
-  const first = pictureClips(film)[0];
-  const server = await serveFolder(r.dir);
-  let browser = null;
-  try {
-    browser = await chromium.launch();
-    const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-    await page.goto(`${server.url}${first.file}`, { waitUntil: 'load' });
-    await page.evaluate(() => window.film.ready);
-    const state = await page.evaluate((len) => {
+  const first = pictureClips(readFilm(r.dir))[0];
+  await withExportPages(r.dir, async ({ open }) => {
+    const { page, duration } = await open(first.file);
+    const state = await evaluate(page, (len) => {
       window.film.frame(len - 0.01);
       const before = document.querySelectorAll('.scene').length && [...document.querySelectorAll('.scene')].map((s) => s.style.display);
       window.film.frame(len + 5);
       const after = [...document.querySelectorAll('.scene')].map((s) => s.style.display);
-      return { before, after, duration: window.film.duration };
+      return { before, after };
     }, first.length);
     assert.deepEqual(state.after, state.before, 'asked for a time past its end, the page still shows its own scene');
-    assert.ok(near(state.duration, first.length, 0.0005));
-  } finally {
-    await browser?.close();
-    await server.close();
-  }
+    assert.ok(near(duration, first.length, 0.0005));
+  });
+});
+
+test('a page whose ready never settles fails by timeout, and the process that ran it exits by itself', SLOW, (t) => {
+  // The pages of a film are loaded with a limit on every wait. A page that never becomes ready must end in an
+  // error, with the browser and the server closed, so that the Node process ends on its own: no kill, no timeout.
+  const dir = tempDir(t, 'stuck-page');
+  writeFileSync(join(dir, 'stuck.html'),
+    '<!doctype html><script>window.film = { ready: new Promise(() => {}), frame() {} };</script>');
+  const script = `
+    import { withExportPages } from ${JSON.stringify(HELPERS)};
+    try {
+      await withExportPages(${JSON.stringify(dir)}, ({ open }) => open('stuck.html'), { timeout: 3000 });
+      console.log('NO ERROR');
+    } catch (e) { console.log('ERROR ' + e.message); }
+  `;
+  const started = Date.now();
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 45_000 });
+  assert.equal(r.error, undefined, `the process ended by itself (it was killed: ${r.error?.code})`);
+  assert.equal(r.signal, null);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^ERROR page\.evaluate did not settle within 3 s$/m);
+  assert.ok(Date.now() - started < 40_000, 'and quickly');
+});
+
+// ---- drafts are not exported ------------------------------------------------------------------------------
+
+test('a draft (estimated timing) is not exported: one plain sentence, exit 2, nothing written', SLOW, async (t) => {
+  const dir = project(t, { draft: true });
+  const sentence = /^This reel is still a draft \(its timing is estimated, there is no voice yet\): the OpenFilm export happens once her voice is in\.$/;
+  await assert.rejects(exportOpenfilm(dir), (e) => e.name === 'BuildError' && sentence.test(e.message));
+  const r = spawnSync(process.execPath, [EXPORT_CLI, dir], { encoding: 'utf8', env: process.env, timeout: RUN_MS });
+  assert.equal(r.status, 2, 'a build problem: exit 2');
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr.trimEnd(), sentence, 'one plain sentence, no stack trace');
+  assert.deepEqual(readdirSync(dir).filter((n) => /^\.?openfilm/.test(n)), [], 'no folder, no staging folder');
+
+  // the same reel with its timing aligned to a recording is exported
+  const final = project(t);
+  assert.equal((await exportOpenfilm(final)).dir, join(final, 'openfilm'));
 });
 
 // ---- never clobber hand edits ----------------------------------------------------------------------
@@ -362,7 +406,7 @@ test('a deleted file, a changed page and a folder without a manifest all count a
 
 test('the CLI prints "openfilm -> <dir> (<n> clips)" and says when the edits were kept', SLOW, async (t) => {
   const dir = project(t, { story: twoScenes });
-  const run = () => spawnSync(process.execPath, [EXPORT_CLI, dir], { encoding: 'utf8', env: process.env });
+  const run = () => spawnSync(process.execPath, [EXPORT_CLI, dir], { encoding: 'utf8', env: process.env, timeout: RUN_MS });
   const a = run();
   assert.equal(a.status, 0, a.stderr);
   const n = readFilm(join(dir, 'openfilm')).tracks.flatMap((tr) => tr.clips).length;
@@ -373,35 +417,54 @@ test('the CLI prints "openfilm -> <dir> (<n> clips)" and says when the edits wer
   const lines = b.stdout.trim().split('\n');
   assert.equal(lines[0], `openfilm -> ${join(dir, 'openfilm-2')} (${n} clips)`);
   assert.match(lines.slice(1).join('\n'), /openfilm\/.*edits.*not (overwritten|changed)/s);
-  assert.equal(spawnSync(process.execPath, [EXPORT_CLI], { encoding: 'utf8' }).status, 2, 'no project: usage, exit 2');
+  assert.equal(spawnSync(process.execPath, [EXPORT_CLI], { encoding: 'utf8', timeout: RUN_MS }).status, 2, 'no project: usage, exit 2');
 });
 
 // ---- open_studio.sh ------------------------------------------------------------------------------------
 
-// A fake `npx` that records its arguments and prints what OpenFilm's `open` prints.
-function fakeNpx(t, { studio = 'http://127.0.0.1:4747', status = 0 } = {}) {
-  const bin = tempDir(t, 'paim-bin');
+// A fake `npx` that records its arguments and prints what OpenFilm's `open` prints. With `hang` it starts a
+// child of its own (pid in <bin>/child.pid) and never ends, like an npx that waits on a stalled node process.
+function fakeNpx(t, { studio = 'http://127.0.0.1:4747', status = 0, hang = false } = {}) {
+  // not tempDir(): its removal hook would run before the one below, which reads the child's pid from this folder
+  const bin = mkdtempSync(join(tmpdir(), 'paim-bin-'));
   const log = join(bin, 'npx.log');
-  writeFileSync(join(bin, 'npx'),
-    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\necho "project  $4"\necho "Studio   ${studio}"\nexit ${status}\n`);
+  const body = hang
+    ? `sleep 307 &\necho $! > "${join(bin, 'child.pid')}"\nwait\n`
+    : `echo "project  $4"\necho "Studio   ${studio}"\nexit ${status}\n`;
+  writeFileSync(join(bin, 'npx'), `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\n${body}`);
   chmodSync(join(bin, 'npx'), 0o755);
-  return { bin, log };
+  const childPid = () => (existsSync(join(bin, 'child.pid')) ? Number(readFileSync(join(bin, 'child.pid'), 'utf8')) : null);
+  // whatever the test leaves running is stopped when it ends
+  t.after(() => {
+    const pid = childPid();
+    if (pid) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+    rmSync(bin, { recursive: true, force: true });
+  });
+  return { bin, log, childPid };
 }
 
-const studio = (args, bin) => spawnSync('bash', [OPEN_STUDIO, ...args], {
-  encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmpdir() }, timeout: 20_000,
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const waitFor = async (test, ms = 5000) => {
+  for (let waited = 0; waited < ms && !test(); waited += 50) await new Promise((ok) => setTimeout(ok, 50));
+  return test();
+};
+
+const studio = (args, bin, env = {}) => spawnSync('bash', [OPEN_STUDIO, ...args], {
+  encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmpdir(), ...env }, timeout: 20_000,
 });
 
-test('open_studio.sh runs `npx -y openfilm@latest open <project>/openfilm`, prints it and how to stop Studio', async (t) => {
+test('open_studio.sh runs `npx -y openfilm@latest open <project>/openfilm` and prints it; it never says how to stop Studio', async (t) => {
   const dir = project(t);
-  const { bin, log } = fakeNpx(t, { studio: 'http://127.0.0.1:4747' });
+  // an address with no slash before the query, as the port parse of the first version could not read
+  const { bin, log } = fakeNpx(t, { studio: 'http://127.0.0.1:4747?key=abc123' });
   await exportOpenfilm(dir);
   const r = studio([dir], bin);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(readFileSync(log, 'utf8').trim(), `-y openfilm@latest open ${join(dir, 'openfilm')}`);
-  assert.match(r.stdout, /Studio {3}http:\/\/127\.0\.0\.1:4747/, 'what OpenFilm prints is passed on');
-  assert.match(r.stdout, /lsof -ti tcp:4747 -sTCP:LISTEN \| xargs kill/, 'and how to stop it, with the port it is on');
-  assert.match(r.stdout, /background/i);
+  assert.match(r.stdout, /Studio {3}http:\/\/127\.0\.0\.1:4747\?key=abc123/, 'what OpenFilm prints is passed on');
+  assert.ok(!/kill|lsof|xargs|pkill/i.test(r.stdout), 'no command that stops a Studio: it may be hers, with other films in it');
+  assert.match(r.stdout, /^Studio is hers; never stop or restart it\. She closes it herself\.$/m);
+  assert.match(r.stdout, /session key.*once, in the chat only.*never write it into a file, a note, a log, a commit message or the delivery note/is);
 
   // a folder that holds film.html is opened as it is (openfilm-2 after a re-export)
   const second = join(dir, 'openfilm-2');
@@ -424,7 +487,42 @@ test('open_studio.sh: no project, no export yet, or a failing openfilm each end 
   writeFileSync(join(bare, 'openfilm', 'film.html'), '<!doctype html>');
   const r = studio([bare], failing.bin);
   assert.equal(r.status, 1, 'the exit status of openfilm is kept');
-  assert.ok(!/xargs kill/.test(r.stdout), 'no stop hint when Studio did not start');
+  assert.ok(!/hers|session key/.test(r.stdout), 'no closing notes when Studio did not start');
+});
+
+test('open_studio.sh: a command that stalls is stopped with everything it started, and its log is removed', (t) => {
+  const bare = tempDir(t);
+  mkdirSync(join(bare, 'openfilm'));
+  writeFileSync(join(bare, 'openfilm', 'film.html'), '<!doctype html>');
+  const tmp = tempDir(t, 'paim-tmp');
+  const hung = fakeNpx(t, { hang: true });
+  const r = studio([bare], hung.bin, { PAIM_STUDIO_TIMEOUT: '2', TMPDIR: tmp });
+  assert.equal(r.error, undefined, `the script ended by itself (${r.error?.code})`);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /openfilm did not answer within 2 seconds/);
+  const child = hung.childPid();
+  assert.ok(child > 0, 'the fake npx started its child');
+  assert.equal(alive(child), false, 'the child of the stalled command was stopped too, not only the wrapper');
+  assert.deepEqual(readdirSync(tmp), [], 'the log is removed');
+});
+
+test('open_studio.sh: interrupted (TERM), it stops the command it started and removes its log', async (t) => {
+  const bare = tempDir(t);
+  mkdirSync(join(bare, 'openfilm'));
+  writeFileSync(join(bare, 'openfilm', 'film.html'), '<!doctype html>');
+  const tmp = tempDir(t, 'paim-tmp');
+  const hung = fakeNpx(t, { hang: true });
+  const script = spawn('bash', [OPEN_STUDIO, bare], {
+    env: { PATH: `${hung.bin}:/usr/bin:/bin`, HOME: tmpdir(), TMPDIR: tmp }, stdio: 'ignore',
+  });
+  t.after(() => script.kill('SIGKILL'));
+  const ended = new Promise((done) => script.once('exit', (code, signal) => done({ code, signal })));
+  assert.ok(await waitFor(() => hung.childPid() !== null), 'the command started');
+  script.kill('SIGTERM');
+  const end = await Promise.race([ended, new Promise((done) => setTimeout(() => done('still running'), 10_000))]);
+  assert.notEqual(end, 'still running', 'the script ended after TERM');
+  assert.equal(await waitFor(() => !alive(hung.childPid())), true, 'the command it started was stopped');
+  assert.deepEqual(readdirSync(tmp), [], 'the log is removed');
 });
 
 // ---- doctor.sh ------------------------------------------------------------------------------------------------
@@ -437,6 +535,7 @@ function doctorWith(t, version) {
   chmodSync(join(bin, 'node'), 0o755);
   return spawnSync(DOCTOR, [], {
     env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tempDir(t), PAIM_CONFIG_DIR: tempDir(t, 'paim-config') }, encoding: 'utf8',
+    timeout: RUN_MS,
   });
 }
 
@@ -455,7 +554,7 @@ test('doctor: an openfilm line, ok from Node 22.2, a WARN (never MISSING) below 
 
 // ---- the skill's own text ----------------------------------------------------------------------------------------
 
-test('SKILL.md step 9 tells the agent to export, open Studio and tell her; references/openfilm.md exists', () => {
+test('SKILL.md step 9 tells the agent to export finals, open Studio and tell her; references/openfilm.md exists', () => {
   const text = readFileSync(join(SKILL, 'SKILL.md'), 'utf8');
   for (const mention of ['scripts/export_openfilm.mjs', 'scripts/open_studio.sh', 'references/openfilm.md']) {
     assert.ok(text.includes(mention), `SKILL.md mentions ${mention}`);
@@ -463,9 +562,23 @@ test('SKILL.md step 9 tells the agent to export, open Studio and tell her; refer
   }
   const deliver = text.slice(text.indexOf('## 9. Deliver'), text.indexOf('## Never'));
   assert.match(deliver, /export_openfilm\.mjs/, 'the export belongs to step 9');
-  assert.ok(text.split('\n').length < 200, 'SKILL.md stays under 200 lines');
+  assert.match(deliver, /final reels only.*never a draft/is, 'drafts have no hand-off');
+  assert.match(deliver, /session key/i, 'the address holds a key');
+  assert.match(deliver, /once, in the chat only.*never in a file, a note, a log, a commit or the delivery note/is);
+  assert.match(text.slice(text.indexOf('## Never')), /Stopping or restarting Studio/, 'Never: touching her Studio');
+  const lines = text.trimEnd().split('\n').length;
+  assert.ok(lines < 200, `SKILL.md stays under 200 lines (${lines})`);
+  const topic = text.slice(text.indexOf('6. Hand over the draft MP4'), text.indexOf('6. Hand over the draft MP4') + 400);
+  assert.ok(!/Studio|OpenFilm/i.test(topic), 'the topic-mode draft path does not mention Studio');
+
   const ref = readFileSync(join(SKILL, 'references', 'openfilm.md'), 'utf8');
   for (const word of [/openfilm-2/, /Studio/, /export/i, /volume/i, /not (?:checked|tried)|could not check/i]) assert.match(ref, word);
+  assert.ok(!/lsof|xargs kill|kill \$\(/.test(ref), 'the reference does not say how to kill a Studio');
+  assert.match(ref, /Studio is hers; never stop or restart it/);
+  assert.match(ref, /0\.3\.2.*checked again after an OpenFilm update/s, 'the list of edits is dated to the version');
+  assert.match(ref, /@latest/);
+  assert.match(ref, /not exported|no hand-off for a draft/i);
+  assert.ok(!/voice\s+and\s+music\s+are included only/i.test(ref), 'the draft-export paragraph is gone');
 });
 
 // ---- the real OpenFilm, opt in (PAIM_RUN_OPENFILM=1): downloads the package, starts a private Studio ----------
@@ -498,18 +611,26 @@ test('with the real OpenFilm: look and render work on the export, Studio answers
       rmSync(home, { recursive: true, force: true });
       assert.equal(stillOpen, false, `Studio on port ${port} was not stopped`);
     });
-    const look = spawnSync('npx', ['-y', 'openfilm@latest', 'look'], { cwd: r.dir, env, encoding: 'utf8', timeout: 600_000 });
-    assert.equal(look.status, 0, `${look.stdout}\n${look.stderr}`);
+    // Output goes to files, not pipes: the Studio these commands start must not be able to hold a pipe open.
+    const run = (cmd, args, options, name) => {
+      const out = openSync(join(home, `${name}.log`), 'w');
+      try {
+        const r = spawnSync(cmd, args, { ...options, env, stdio: ['ignore', out, out], timeout: 600_000 });
+        return { status: r.status, text: readFileSync(join(home, `${name}.log`), 'utf8') };
+      } finally { closeSync(out); }
+    };
+    const look = run('npx', ['-y', 'openfilm@latest', 'look'], { cwd: r.dir }, 'look');
+    assert.equal(look.status, 0, look.text);
     const sheet = join(r.dir, '.film', 'cache', 'look');
     assert.ok(existsSync(sheet) && readdirSync(sheet).some((n) => n.endsWith('.png')), 'a contact sheet was written');
 
-    const render = spawnSync('npx', ['-y', 'openfilm@latest', 'render', '0-1'], { cwd: r.dir, env, encoding: 'utf8', timeout: 600_000 });
-    assert.equal(render.status, 0, `${render.stdout}\n${render.stderr}`);
+    const render = run('npx', ['-y', 'openfilm@latest', 'render', '0-1'], { cwd: r.dir }, 'render');
+    assert.equal(render.status, 0, render.text);
     assert.ok(existsSync(join(r.dir, '.film', 'cache', 'render', 'openfilm-0-1.mp4')), 'the first second rendered to an MP4');
 
-    const open = spawnSync('bash', [OPEN_STUDIO, dir], { env, encoding: 'utf8', timeout: 120_000 });
-    assert.equal(open.status, 0, `${open.stdout}\n${open.stderr}`);
-    const url = /Studio {3}(http:\/\/\S+)/.exec(open.stdout)[1];
-    assert.equal((await fetch(url)).status, 200);
+    const open = run('bash', [OPEN_STUDIO, dir], {}, 'open');
+    assert.equal(open.status, 0, open.text);
+    const url = /Studio {3}(http:\/\/\S+)/.exec(open.text)[1];
+    assert.equal((await within(fetch(url), 30_000, 'fetch of the Studio address')).status, 200);
     assert.ok(await portOpen(port));
   });

@@ -3,7 +3,9 @@
 # Usage: open_studio.sh <project>            opens <project>/openfilm
 #        open_studio.sh <folder>             opens a folder that holds film.html (openfilm-2, ...)
 # Runs `npx -y openfilm@latest open <folder>` and prints what it prints. Studio then keeps running in the
-# background (this script does not wait for it); the last lines say how to stop it.
+# background (this script does not wait for it). Studio is hers: it may be a Studio she already had open with
+# other films in it, so this script never stops it and does not say how. PAIM_STUDIO_TIMEOUT (seconds, default
+# 180) is how long the command may take; a command that stalls is stopped with everything it started.
 set -u
 
 [ $# -eq 1 ] || { echo "usage: open_studio.sh <project>" >&2; exit 2; }
@@ -17,36 +19,42 @@ else
   exit 2
 fi
 folder="$(cd "$folder" && pwd)"
+limit="${PAIM_STUDIO_TIMEOUT:-180}"
 
 log="$(mktemp "${TMPDIR:-/tmp}/paim-studio.XXXXXX")" || exit 1
-trap 'rm -f "$log"' EXIT
+pid=""
+# Only a command that is still running (it stalled, or this script was interrupted) is stopped, and as a whole
+# process group: the npx wrapper and the node process it started. A Studio that did start is a process of its
+# own, outside that group, and is left running.
+cleanup() {
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then kill -- "-$pid" 2>/dev/null; fi
+  rm -f "$log"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-# The command ends once Studio is up; a stalled download or start is cut off after three minutes.
+set -m # the background command gets a process group of its own (its pid is the group's id)
 npx -y openfilm@latest open "$folder" >"$log" 2>&1 &
 pid=$!
+set +m
 waited=0
 while kill -0 "$pid" 2>/dev/null; do
-  if [ "$waited" -ge 180 ]; then
-    kill "$pid" 2>/dev/null
+  if [ "$waited" -ge "$limit" ]; then
     cat "$log"
-    echo "open_studio.sh: openfilm did not answer within 3 minutes" >&2
+    echo "open_studio.sh: openfilm did not answer within $limit seconds" >&2
     exit 1
   fi
   sleep 1
   waited=$((waited + 1))
 done
-wait "$pid"
+wait "$pid" 2>/dev/null
 status=$?
+pid=""
 cat "$log"
 [ "$status" -eq 0 ] || exit "$status"
 
-url="$(sed -n 's/^Studio  *\(http[^ ]*\).*/\1/p' "$log" | head -1)"
-port="${url##*:}"
-port="${port%%/*}"
 echo
-echo "Studio keeps running in the background, on this computer only. Leave it running while P.AIM edits."
-if [ -n "$port" ] && [ "$port" -eq "$port" ] 2>/dev/null; then
-  echo "To stop it (every film open in it closes): lsof -ti tcp:$port -sTCP:LISTEN | xargs kill"
-else
-  echo "To stop it: quit it from Studio, or end the node process that listens on the Studio address above."
-fi
+echo "Studio keeps running in the background, on this computer only."
+echo "Studio is hers; never stop or restart it. She closes it herself."
+echo "The Studio address above contains a local session key: give it to her once, in the chat only. Never write it into a file, a note, a log, a commit message or the delivery note."

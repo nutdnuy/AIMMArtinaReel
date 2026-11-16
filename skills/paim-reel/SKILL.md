@@ -167,8 +167,7 @@ file without her voice as a final.
 
 Send the MP4 and its preview (topic mode: also the read-aloud sheet) and report:
 
-- the font that drew the text (`font:` from `check.mjs`; IBM Plex Sans Thai means Sukhumvit Set
-  is not on this machine);
+- the font that drew the text (`font:` from `check.mjs`; IBM Plex Sans Thai = no Sukhumvit Set here);
 - what drew the sprites: `codex` or `gemini`, or "custom command" when `PAIM_IMAGE_CMD` or the
   profile's `image_cmd` is set;
 - what was checked: `check.mjs` all PASS, the `--scenes` sheet looked at, `ffprobe`, and every
@@ -180,10 +179,11 @@ Send the MP4 and its preview (topic mode: also the read-aloud sheet) and report:
   handle or disclaimer on the end card);
 - that you cannot listen to the mix, so she should play it once before posting.
 
-Then hand the reel over for hand edits (not when `doctor.sh` printed `WARN openfilm`: say so instead):
-`node <skill>/scripts/export_openfilm.mjs <project>`, then `bash <skill>/scripts/open_studio.sh <project>`
-(or the folder the export printed). Tell her the Studio address, what she can change and what not, and
-that a re-export never overwrites her edits: `references/openfilm.md`. Studio's online services stay off.
+Final reels only, never a draft (and not when `doctor.sh` printed `WARN openfilm`: say so): hand over
+for hand edits with `node <skill>/scripts/export_openfilm.mjs <project>`, then
+`bash <skill>/scripts/open_studio.sh <project>`, and tell her what she can change and what not (a
+re-export never overwrites her edits): `references/openfilm.md`. The Studio address holds a session key:
+give it to her once, in the chat only, never in a file, a note, a log, a commit or the delivery note.
 
 ## Never
 
@@ -196,3 +196,4 @@ that a re-export never overwrites her edits: `references/openfilm.md`. Studio's 
   stay on this machine. You read the script text in this chat; only the short sprite descriptions
   go to the image tool; fact-check searches go to the web.
 - Typing a password, API key or login code for the user, or storing one. She signs in herself.
+- Stopping or restarting Studio (it is hers) or using its online services with her voice.

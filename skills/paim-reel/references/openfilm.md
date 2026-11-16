@@ -9,6 +9,10 @@ checked", nobody has looked: do not promise it to her.
 
 ## Run it
 
+Only a final reel is exported (timing aligned to her recording). A draft (estimated timing, no voice yet)
+is not exported: `export_openfilm.mjs` stops with one sentence (exit 2), there is no hand-off for a draft,
+and the export happens once her voice is in.
+
 ```
 node <skill>/scripts/export_openfilm.mjs <project>     # prints: openfilm -> <folder> (<n> clips)
 bash <skill>/scripts/open_studio.sh <project>          # or the folder it printed, if not openfilm/
@@ -17,9 +21,12 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
 - Needs Node 22.2 or newer (`doctor.sh` prints `openfilm: ok` or `WARN openfilm (needs Node 22.2 or
   newer)`; on a WARN skip the hand-off and say so) and, the first time, a download of the OpenFilm
   package and a headless Chromium (about 100 MB) through `npx -y openfilm@latest`.
-- `open_studio.sh` prints Studio's address and returns at once; Studio keeps running in the
-  background on this computer (127.0.0.1) and the script's last line says how to stop it. If Studio
-  was already running, the film opens in it. Give her the address, or let it open her browser.
+- `open_studio.sh` prints Studio's address and returns at once; Studio keeps running in the background
+  on this computer (127.0.0.1). It may be a Studio she already has open with other films in it, so:
+  Studio is hers; never stop or restart it. She closes it herself. (A command that stalls is stopped,
+  with everything it started, after 3 minutes; a Studio that did start is left running.)
+- The address Studio prints contains a local session key. Give it to her once, in the chat only. Never
+  write it into a file, a note, a log, a commit message or the delivery note.
 - The export makes no network call and needs no sign-in. Studio also has features that use online
   services (making voice-over, music, pictures; transcripts). Do not use them: her voice recording
   stays on this machine. Nothing in the hand-off connects a service for her.
@@ -40,10 +47,11 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
   the frame), nothing you can see.
 - `assets/` (sprites, photos, fonts, logo, music, `voice.wav`, `sfx/`), `engine/`, `data.js`,
   `style.css`, and `.paim-export.json` (the manifest of file hashes, see "A re-export").
-- A reel in draft (estimated timing) is exported too: the pictures are right, but the voice
-  and music are included only if their files exist, whereas our draft MP4 carries effects only.
 
 ## What P.AIM can change in Studio (seen working, on 0.3.2)
+
+This list was observed with OpenFilm 0.3.2. `open_studio.sh` runs `npx -y openfilm@latest`, so Studio may be
+newer than that: the list must be checked again after an OpenFilm update (`--version` says which one ran).
 
 Every change is written to `film.html` in `openfilm/` a moment after she makes it. Seen:
 

@@ -7,6 +7,8 @@
 // window.film = {frame(t), duration, ready}, and frame(t) is __paim.seek(sceneStart + t). There is no second
 // drawing code. Format: OpenFilm's SPEC.md, `npx -y openfilm@latest skill edit`, and references/openfilm.md.
 //
+// Only a final reel is exported: a project whose timing is still estimated (a draft) is refused with one sentence.
+//
 // Hand edits are never overwritten: every export writes a manifest of file hashes, and a folder whose files no
 // longer match its manifest (or that has none) is left alone; the export goes to openfilm-2/, openfilm-3/, ...
 import {
@@ -30,7 +32,9 @@ const volumeOf = (db) => (10 ** (db / 20)).toFixed(4);
 
 // Length in seconds of an audio file, from ffprobe.
 function mediaSeconds(file) {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], { encoding: 'utf8' });
+  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], {
+    encoding: 'utf8', timeout: 30_000,
+  });
   const seconds = Number(r.stdout?.trim());
   if (r.error || r.status !== 0 || !(seconds > 0)) {
     throw new BuildError(`cannot read the length of ${file} (ffprobe is needed: run doctor.sh)`);
@@ -196,6 +200,10 @@ function pickFolder(projectDir) {
 export async function exportOpenfilm(projectDir) {
   projectDir = resolve(projectDir);
   const { resolved, buildDir } = await buildProject(projectDir);
+  // A draft has no voice yet and its timing is a guess: there is nothing to hand over for hand edits.
+  if (resolved.estimated) {
+    throw new BuildError('This reel is still a draft (its timing is estimated, there is no voice yet): the OpenFilm export happens once her voice is in.');
+  }
   const staging = mkdtempSync(join(projectDir, '.openfilm-staging-'));
   try {
     const clips = writeExport(staging, projectDir, buildDir, resolved);
