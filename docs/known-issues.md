@@ -31,6 +31,10 @@ below has been worked on since it was written down. The README's status section 
 - Times are rounded one by one to three decimals, so the test that line gaps are exact passes only for the values
   it happens to use.
 - A recording shorter than 0.04 s could produce a negative start time.
+- `timing.py align` records the sha256 of `voice/voice.wav` in `timing.json` (`voice_sha256`), and `render.mjs` and
+  `export_openfilm.mjs` refuse a voice file that no longer matches it. A `timing.json` written before that field
+  existed is compared by length only (a difference over 0.05 s is refused), so a new take of nearly the same length
+  passes until `timing.py align` is run again. `build.mjs` and `check.mjs` do not make this check.
 
 ## Voice preparation and transcription (`prep_voice.py`, `transcribe.py`)
 
@@ -64,6 +68,15 @@ below has been worked on since it was written down. The README's status section 
   sprite's line when several are drawn at once.
 - If the log file cannot be written, the last-resort error handler can fail too.
 - The hint about the Gemini trust setting is now rarely reached.
+- The Google routes run an auto-approving agent without a sandbox. The Gemini CLI command uses `--yolo` and the
+  Antigravity route `--dangerously-skip-permissions`, so the drawing tool approves its own shell and file actions
+  with the user's full rights, and its prompt contains the sprite description the assistant wrote. Codex runs with
+  `-s workspace-write` and is the sandboxed and recommended route. No flag was changed. A sprite description must
+  only ever be a plain description of an object, never a command, an instruction or text copied from elsewhere.
+- A timed-out image command is stopped together with everything it started (its process group is killed). A helper
+  that deliberately leaves that group (a daemon that starts a session of its own) is not reached. The command now
+  runs in a group of its own, so a Ctrl-C in the terminal is handled by `image_cli.py` (it stops the group) instead of
+  reaching the command directly; that path has no test.
 
 ## Page engine (layout and drawing)
 
@@ -156,3 +169,8 @@ below has been worked on since it was written down. The README's status section 
 - A hard kill of the export can leave a `.openfilm-staging-*` folder behind.
 - The state check does not cover the shape of an arrow, ring or cross, because the test fixtures have none.
 - A browser that starts after the 30-second limit is never closed.
+- `open_studio.sh` runs OpenFilm 0.3.2 (`PAIM_OPENFILM_VERSION` overrides it), not the latest version; the list of
+  hand edits in `references/openfilm.md` was observed with that version only.
+- Every attribute in `film.html` is now HTML-escaped, so the music fade's `overrides` JSON is written as
+  `overrides="[{&quot;fade&quot;:[0,2]}]"`. OpenFilm's own reader decodes it back (checked against its parser), but
+  Studio was not opened on such a file in this wave.

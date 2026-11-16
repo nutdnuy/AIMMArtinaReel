@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -40,13 +41,13 @@ def test_generate_with_relative_folder(tmp_path, fake, monkeypatch):
     """The command runs with cwd=folder, so a relative -C or file path would point at nothing."""
     monkeypatch.chdir(tmp_path)
     seen = {}
-    real_run = subprocess.run
+    real_popen = subprocess.Popen
 
     def spy(cmd, **kw):
         seen["cmd"], seen["cwd"] = cmd, kw["cwd"]
-        return real_run(cmd, **kw)
+        return real_popen(cmd, **kw)
 
-    monkeypatch.setattr(subprocess, "run", spy)
+    monkeypatch.setattr(subprocess, "Popen", spy)
     out = generate("codex", Path("proj/gen/sprites"), "a-raw.png", "x", wait=10)
     assert out.is_absolute() and out.is_file() and out == tmp_path.resolve() / "proj/gen/sprites/a-raw.png"
     assert Path(seen["cwd"]).is_absolute()
@@ -57,11 +58,11 @@ def test_build_command_codex_folder_is_absolute_when_generate_calls_it(tmp_path,
     monkeypatch.chdir(tmp_path)
     captured = {}
 
-    def fake_run(cmd, **kw):
+    def fake_popen(cmd, **kw):
         captured["cmd"] = cmd
         raise FileNotFoundError
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
     with pytest.raises(ImageCliError):
         generate("codex", Path("rel/dir"), "a-raw.png", "x")
     assert captured["cmd"][captured["cmd"].index("-C") + 1] == str(tmp_path.resolve() / "rel/dir")
@@ -220,3 +221,30 @@ def test_real_provider_draws(tmp_path):
     from key_sprite import key
     info = key(Path(r.stdout.strip()), tmp_path / "again.png")
     assert info["on_palette"] >= 0.6
+
+
+HANGER = """\
+import subprocess, sys, time
+# a background writer (what an image CLI's sub-process looks like), then a hang
+subprocess.Popen([sys.executable, "-c",
+                  "import pathlib, sys, time; time.sleep(3); pathlib.Path(sys.argv[1]).write_text('late')", sys.argv[1]])
+open(sys.argv[2], "w").write(str(__import__("os").getpid()))
+time.sleep(60)
+"""
+
+
+def test_a_timed_out_command_is_stopped_with_everything_it_started(tmp_path, monkeypatch):
+    """subprocess.run(timeout=) kills only the direct child: its background writer lived on and wrote later."""
+    script = tmp_path / "hang.py"
+    script.write_text(HANGER, encoding="utf-8")
+    marker, pidfile = tmp_path / "late-write.txt", tmp_path / "hang.pid"
+    monkeypatch.setenv("PAIM_IMAGE_CMD", f"{shlex.quote(sys.executable)} {script} {marker} {pidfile}")
+    monkeypatch.setenv("PAIM_IMAGE_BACKOFF", "0")
+    monkeypatch.setenv("PAIM_CONFIG_DIR", str(tmp_path / "config"))
+    with pytest.raises(ImageCliError):
+        generate("codex", tmp_path / "out", "a-raw.png", "x", wait=1)
+    hung = int(pidfile.read_text())
+    time.sleep(4)   # the background writer would have written at 3 s
+    assert not marker.exists(), "the child of the timed-out command survived and wrote its file"
+    with pytest.raises(ProcessLookupError):
+        os.kill(hung, 0)   # the hung command itself is gone and reaped

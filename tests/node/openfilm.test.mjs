@@ -5,11 +5,12 @@ import {
   openSync, closeSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync, spawn } from 'node:child_process';
 import { createConnection } from 'node:net';
-import { exportOpenfilm } from '../../skills/paim-reel/scripts/export_openfilm.mjs';
+import { exportOpenfilm, clip, trackHtml } from '../../skills/paim-reel/scripts/export_openfilm.mjs';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { sfxEvents } from '../../skills/paim-reel/lib/sfx.mjs';
@@ -24,6 +25,7 @@ const HELPERS = fileURLToPath(new URL('../openfilm-helpers.mjs', import.meta.url
 const RUN_MS = 60_000; // every child process a test starts is given at most this long
 const SLOW = { timeout: 180_000 };
 const REAL = process.env.PAIM_RUN_OPENFILM === '1';
+const PINNED = '0.3.2'; // the OpenFilm version the skill was checked against (open_studio.sh pins it)
 
 // ---- helpers -----------------------------------------------------------------------------------
 
@@ -57,8 +59,10 @@ const twoScenes = (story) => {
   });
 };
 
+// Attributes of a start tag, entities decoded the way OpenFilm reads them (it knows these five).
+const decodeEntities = (v) => v.replace(/&(amp|lt|gt|quot|#39);/g, (all, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[e]);
 const attrsOf = (text) => Object.fromEntries(
-  [...text.matchAll(/([\w-]+)=(?:"([^"]*)"|'([^']*)')/g)].map((m) => [m[1], m[2] ?? m[3]]));
+  [...text.matchAll(/([\w-]+)=(?:"([^"]*)"|'([^']*)')/g)].map((m) => [m[1], decodeEntities(m[2] ?? m[3])]));
 
 // {viewport, tracks: [{attrs, clips: [{tag, attrs, file, from, to, at, length}]}]} of a film.html.
 function readFilm(dir) {
@@ -169,6 +173,16 @@ test('film.html uses only what OpenFilm reads: section, iframe and audio, with t
     for (const name of Object.keys(attrsOf(m[2]))) assert.ok(allowed[m[1]].includes(name), `<${m[1]} ${name}> is a known attribute`);
   }
   assert.ok(!/<script/i.test(html), 'the head of a film has no script');
+});
+
+test('every attribute value is HTML-escaped: & " \' < > cannot end the attribute or open a tag', () => {
+  const nasty = `a&b "c" 'd' <e>`;
+  const html = clip('audio', { id: 'x', src: nasty, overrides: '[{"fade":[0,2]}]' });
+  assert.equal(html, `<audio id="x" src="a&amp;b &quot;c&quot; &#39;d&#39; &lt;e&gt;" overrides="[{&quot;fade&quot;:[0,2]}]"></audio>`);
+  assert.ok(!/[<>]/.test(html.slice('<audio '.length, -'></audio>'.length)), 'no raw < or > inside the tag');
+  assert.equal(attrsOf(html).src, nasty, 'OpenFilm decodes it back to the value');
+  assert.deepEqual(JSON.parse(attrsOf(html).overrides), [{ fade: [0, 2] }]);
+  assert.equal(trackHtml({ title: nasty, clips: [] }), `<section title="a&amp;b &quot;c&quot; &#39;d&#39; &lt;e&gt;">\n  \n</section>`);
 });
 
 test('effects that overlap in time go to different tracks; no track has clips that overlap', SLOW, async (t) => {
@@ -338,6 +352,34 @@ test('a draft (estimated timing) is not exported: one plain sentence, exit 2, no
   assert.equal((await exportOpenfilm(final)).dir, join(final, 'openfilm'));
 });
 
+test('a voice that is not the one the timing was aligned to is not exported: one plain sentence, exit 2, nothing written', SLOW, async (t) => {
+  const sentence = /^timing\.json belongs to another take: run transcribe\.py and timing\.py align again$/;
+  const gone = (dir) => assert.deepEqual(readdirSync(dir).filter((n) => /^\.?openfilm/.test(n)), [], 'no folder, no staging folder');
+
+  // a new, longer take next to the old 3.0 s timing (no hash: the length tells)
+  const longer = project(t);
+  sineWav(join(longer, 'voice', 'voice.wav'), 10.25);
+  await assert.rejects(exportOpenfilm(longer), (e) => e.name === 'BuildError' && sentence.test(e.message));
+  const r = spawnSync(process.execPath, [EXPORT_CLI, longer], { encoding: 'utf8', env: process.env, timeout: RUN_MS });
+  assert.equal(r.status, 2);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr.trimEnd(), sentence);
+  gone(longer);
+
+  // another take of the same length: the hash timing.py recorded tells
+  const same = project(t);
+  const file = join(same, 'timing.json');
+  writeFileSync(file, JSON.stringify({
+    ...JSON.parse(readFileSync(file, 'utf8')),
+    voice_sha256: createHash('sha256').update(readFileSync(join(same, 'voice', 'voice.wav'))).digest('hex'),
+  }));
+  assert.equal((await exportOpenfilm(same)).dir, join(same, 'openfilm'), 'the voice the timing was aligned to is exported');
+  sineWav(join(same, 'voice', 'voice.wav'), 3, 880);
+  rmSync(join(same, 'openfilm'), { recursive: true, force: true });
+  await assert.rejects(exportOpenfilm(same), (e) => sentence.test(e.message));
+  gone(same);
+});
+
 // ---- never clobber hand edits ----------------------------------------------------------------------
 
 test('a re-export of an untouched openfilm/ overwrites it in place; files no longer exported go', SLOW, async (t) => {
@@ -455,14 +497,14 @@ const studio = (args, bin, env = {}) => spawnSync('bash', [OPEN_STUDIO, ...args]
   encoding: 'utf8', env: { PATH: `${bin}:/usr/bin:/bin`, HOME: tmpdir(), ...env }, timeout: 20_000,
 });
 
-test('open_studio.sh runs `npx -y openfilm@latest open <project>/openfilm` and prints it; it never says how to stop Studio', async (t) => {
+test('open_studio.sh runs `npx -y openfilm@0.3.2 open <project>/openfilm` and prints it; it never says how to stop Studio', async (t) => {
   const dir = project(t);
   // an address with no slash before the query, as the port parse of the first version could not read
   const { bin, log } = fakeNpx(t, { studio: 'http://127.0.0.1:4747?key=abc123' });
   await exportOpenfilm(dir);
   const r = studio([dir], bin);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(readFileSync(log, 'utf8').trim(), `-y openfilm@latest open ${join(dir, 'openfilm')}`);
+  assert.equal(readFileSync(log, 'utf8').trim(), `-y openfilm@${PINNED} open ${join(dir, 'openfilm')}`);
   assert.equal(readFileSync(join(bin, 'stdin.txt'), 'utf8').trim(), 'null', 'npx gets /dev/null as stdin, so a terminal cannot stop it (SIGTTIN)');
   assert.match(r.stdout, /Studio {3}http:\/\/127\.0\.0\.1:4747\?key=abc123/, 'what OpenFilm prints is passed on');
   assert.ok(!/kill|lsof|xargs|pkill/i.test(r.stdout), 'no command that stops a Studio: it may be hers, with other films in it');
@@ -474,7 +516,13 @@ test('open_studio.sh runs `npx -y openfilm@latest open <project>/openfilm` and p
   mkdirSync(second);
   writeFileSync(join(second, 'film.html'), '<!doctype html>');
   assert.equal(studio([second], bin).status, 0);
-  assert.equal(readFileSync(log, 'utf8').trim().split('\n').pop(), `-y openfilm@latest open ${second}`);
+  assert.equal(readFileSync(log, 'utf8').trim().split('\n').pop(), `-y openfilm@${PINNED} open ${second}`);
+
+  // the version is one variable at the top of the script, and an environment variable overrides it
+  assert.match(readFileSync(OPEN_STUDIO, 'utf8').split('\n').slice(0, 12).join('\n'), /^openfilm_version="\$\{PAIM_OPENFILM_VERSION:-0\.3\.2\}"$/m);
+  assert.ok(!/openfilm@latest/.test(readFileSync(OPEN_STUDIO, 'utf8')), 'the script never asks for @latest');
+  assert.equal(studio([second], bin, { PAIM_OPENFILM_VERSION: '0.4.0' }).status, 0);
+  assert.equal(readFileSync(log, 'utf8').trim().split('\n').pop(), `-y openfilm@0.4.0 open ${second}`);
 });
 
 test('open_studio.sh: no project, no export yet, or a failing openfilm each end with a plain message', (t) => {
@@ -586,7 +634,8 @@ test('SKILL.md step 9 tells the agent to export finals, open Studio and tell her
   assert.ok(!/lsof|xargs kill|kill \$\(/.test(ref), 'the reference does not say how to kill a Studio');
   assert.match(ref, /Studio is hers; never stop or restart it/);
   assert.match(ref, /0\.3\.2.*checked again after an OpenFilm update/s, 'the list of edits is dated to the version');
-  assert.match(ref, /@latest/);
+  assert.ok(ref.includes('openfilm@0.3.2') && !ref.includes('@latest'), 'the reference names the pinned version, not @latest');
+  assert.match(ref, /PAIM_OPENFILM_VERSION/);
   assert.match(ref, /not exported|no hand-off for a draft/i);
   assert.ok(!/voice\s+and\s+music\s+are included only/i.test(ref), 'the draft-export paragraph is gone');
 });
@@ -629,12 +678,12 @@ test('with the real OpenFilm: look and render work on the export, Studio answers
         return { status: r.status, text: readFileSync(join(home, `${name}.log`), 'utf8') };
       } finally { closeSync(out); }
     };
-    const look = run('npx', ['-y', 'openfilm@latest', 'look'], { cwd: r.dir }, 'look');
+    const look = run('npx', ['-y', `openfilm@${PINNED}`, 'look'], { cwd: r.dir }, 'look');
     assert.equal(look.status, 0, look.text);
     const sheet = join(r.dir, '.film', 'cache', 'look');
     assert.ok(existsSync(sheet) && readdirSync(sheet).some((n) => n.endsWith('.png')), 'a contact sheet was written');
 
-    const render = run('npx', ['-y', 'openfilm@latest', 'render', '0-1'], { cwd: r.dir }, 'render');
+    const render = run('npx', ['-y', `openfilm@${PINNED}`, 'render', '0-1'], { cwd: r.dir }, 'render');
     assert.equal(render.status, 0, render.text);
     assert.ok(existsSync(join(r.dir, '.film', 'cache', 'render', 'openfilm-0-1.mp4')), 'the first second rendered to an MP4');
 

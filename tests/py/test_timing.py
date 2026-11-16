@@ -179,3 +179,23 @@ def test_cli_align_refuses_unresolved_words(tmp_path):
     assert "[?]" in r.stderr and "fill" in r.stderr.lower()
     assert r.stdout == ""
     assert not (tmp_path / "timing.json").exists()
+
+
+def test_cli_align_records_the_sha256_of_the_voice_it_aligned(tmp_path):
+    import hashlib
+    make_project(tmp_path, "l01: ETF กับหุ้น ต่างกันยังไง\nl02: กขค งจ\n", words=W[:5], duration=4.3)
+    wav = tmp_path / "voice" / "voice.wav"
+    wav.write_bytes(b"RIFF-not-really-a-wav-but-bytes")
+    r = run_cli("align", tmp_path)
+    assert r.returncode == 0, r.stderr
+    t = json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
+    assert t["voice_sha256"] == hashlib.sha256(wav.read_bytes()).hexdigest()
+
+
+def test_cli_align_without_a_voice_file_records_no_hash_and_estimate_never_does(tmp_path):
+    make_project(tmp_path, "l01: ETF กับหุ้น ต่างกันยังไง\nl02: กขค งจ\n", words=W[:5], duration=4.3)
+    assert run_cli("align", tmp_path).returncode == 0
+    assert "voice_sha256" not in json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))
+    (tmp_path / "voice" / "voice.wav").write_bytes(b"x")
+    assert run_cli("estimate", tmp_path).returncode == 0
+    assert "voice_sha256" not in json.loads((tmp_path / "timing.json").read_text(encoding="utf-8"))

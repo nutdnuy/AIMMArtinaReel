@@ -3,7 +3,7 @@
 import {
   readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, copyFileSync, readdirSync, realpathSync,
 } from 'node:fs';
-import { join, resolve, isAbsolute, extname } from 'node:path';
+import { join, resolve, isAbsolute, extname, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadBrand } from '../lib/brand.mjs';
 import { loadProfile, effectiveBrand } from '../lib/profile.mjs';
@@ -35,6 +35,16 @@ function readJson(file, hint) {
 
 // A path from the story or the brand: absolute, or relative to the project folder.
 const inProject = (projectDir, p) => (isAbsolute(p) ? p : resolve(projectDir, p));
+
+// The extension a copied file keeps: lower-cased, plain letters and digits only. It ends up in file names and in
+// attribute values of the page, so a name such as song.m'"><img ...> must never get through.
+function plainExtension(source, what) {
+  const ext = extname(source).toLowerCase();
+  if (!/^\.[a-z0-9]{1,5}$/.test(ext)) {
+    throw new BuildError(`${what}: the file name ${JSON.stringify(basename(source))} needs a plain extension (1 to 5 letters or digits, like .mp3 or .png)`);
+  }
+  return ext;
+}
 
 // Names of the finished sprites (gen/sprites/<name>.png, not the -raw drafts).
 function spriteNames(projectDir) {
@@ -112,6 +122,9 @@ export async function buildProject(projectDir, opts = {}) {
   const logoSource = brand.logo ? inProject(projectDir, brand.logo) : null;
   if (logoSource && !existsSync(logoSource)) throw new BuildError(`logo: file not found: ${logoSource}`);
 
+  const musicExt = musicSource ? plainExtension(musicSource, 'story.music') : null;
+  const logoExt = logoSource ? plainExtension(logoSource, 'logo') : null;
+
   const buildDir = join(projectDir, 'build');
   rmSync(buildDir, { recursive: true, force: true });
   mkdirSync(join(buildDir, 'engine'), { recursive: true });
@@ -139,13 +152,13 @@ export async function buildProject(projectDir, opts = {}) {
 
   // The music is copied too, so the build never names a path outside it.
   if (musicSource) {
-    const name = `music${extname(musicSource).toLowerCase()}`;
+    const name = `music${musicExt}`;
     copyFileSync(musicSource, join(buildDir, 'assets', name));
     resolved.music = `assets/${name}`;
   }
 
   if (logoSource) {
-    const name = `logo${extname(logoSource).toLowerCase()}`;
+    const name = `logo${logoExt}`;
     copyFileSync(logoSource, join(buildDir, 'assets', name));
     resolved.endCard.logo = `assets/${name}`;
   } else {

@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -128,6 +129,26 @@ def _wait_for(target: Path, log: Path, wait: float) -> bool:
         time.sleep(min(POLL_SECONDS, max(deadline - time.monotonic(), 0.05)))
 
 
+def _run_group(cmd: "list[str]", folder: Path, out, wait: float) -> int:
+    """Run `cmd` in its own process group; on a timeout (or Ctrl-C) kill the whole group, not just the child.
+
+    subprocess.run(timeout=) kills only the direct child, and an image CLI starts helpers (Gemini hands the
+    drawing to a sub-agent) that would live on and write their file later. A group of its own also means a
+    terminal's Ctrl-C no longer reaches the command by itself, so an interrupt is handled here too.
+    """
+    with subprocess.Popen(cmd, cwd=folder, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                          start_new_session=True) as proc:
+        try:
+            return proc.wait(timeout=wait)
+        except BaseException:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass   # everything has already exited
+            proc.wait()   # reap the direct child
+            raise
+
+
 def generate(provider: str, folder: Path, filename: str, subject: str, size: str = "1024x1024",
              wait: int = 300, profile: "dict | None" = None) -> Path:
     """Ask the image CLI to draw `subject` into <folder>/<filename>; return that path."""
@@ -145,8 +166,7 @@ def generate(provider: str, folder: Path, filename: str, subject: str, size: str
         target.unlink(missing_ok=True)   # a leftover from an earlier run must not pass for this drawing
         try:
             with log.open("wb") as out:
-                code = subprocess.run(cmd, cwd=folder, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
-                                      timeout=wait).returncode
+                code = _run_group(cmd, folder, out, wait)
         except FileNotFoundError:
             hint = INSTALL.get(provider)
             raise ImageCliError(

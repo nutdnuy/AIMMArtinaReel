@@ -3,7 +3,7 @@
 After the MP4 is delivered, the reel is also exported as an OpenFilm project and opened in OpenFilm
 Studio (github.com/openfilm/openfilm, MIT), a video editor that runs in the browser, so that P.AIM can
 change it by hand. The skill's renderer (`render.mjs`) still makes the MP4; Studio is an extra, not a
-replacement. Everything here was learnt from OpenFilm 0.3.2 (`npx -y openfilm@latest --version`), by
+replacement. Everything here was learnt from OpenFilm 0.3.2 (`npx -y openfilm@0.3.2 --version`), by
 reading what the tool prints and by using Studio on an exported reel. Where this file says "not
 checked", nobody has looked: do not promise it to her.
 
@@ -20,7 +20,7 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
 
 - Needs Node 22.2 or newer (`doctor.sh` prints `openfilm: ok` or `WARN openfilm (needs Node 22.2 or
   newer)`; on a WARN skip the hand-off and say so) and, the first time, a download of the OpenFilm
-  package and a headless Chromium (about 100 MB) through `npx -y openfilm@latest`.
+  package and a headless Chromium (about 100 MB) through `npx -y openfilm@0.3.2`.
 - Before the first `open_studio.sh` of a conversation, tell her Studio may need to download about 100 MB
   (a few minutes) if it has not been used on this machine, and ask; wait for her yes. Nothing reliable
   says whether it was used here before (another user's cache, a new OpenFilm version and the headless
@@ -56,8 +56,10 @@ bash <skill>/scripts/open_studio.sh <project>          # or the folder it printe
 
 ## What P.AIM can change in Studio (seen working, on 0.3.2)
 
-This list was observed with OpenFilm 0.3.2. `open_studio.sh` runs `npx -y openfilm@latest`, so Studio may be
-newer than that: the list must be checked again after an OpenFilm update (`--version` says which one ran).
+This list was observed with OpenFilm 0.3.2. `open_studio.sh` runs `npx -y openfilm@0.3.2`: the version the
+skill was checked against, set once at the top of the script (the environment variable
+`PAIM_OPENFILM_VERSION` overrides it). The list must be checked again after an OpenFilm update, that is,
+when the pin is moved to a newer version (`--version` says which one ran).
 
 Every change is written to `film.html` in `openfilm/` a moment after she makes it. Seen:
 

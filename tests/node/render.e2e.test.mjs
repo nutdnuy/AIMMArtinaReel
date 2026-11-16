@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync, statSync, chmodSync, readdirSync, copyFileSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { renderProject } from '../../skills/paim-reel/scripts/render.mjs';
 import { stills } from '../../skills/paim-reel/scripts/still.mjs';
@@ -13,6 +15,7 @@ import { ENTER_DUR } from '../../skills/paim-reel/engine/motion.mjs';
 import { copyFixture, tempDir, sineWav, solidPng, ffprobe, addPhoto } from '../helpers.mjs';
 
 const SLOW = { timeout: 120_000 };
+const SCRIPTS = fileURLToPath(new URL('../../skills/paim-reel/scripts/', import.meta.url));
 
 function project(t, leaf = 'mini') {
   process.env.PAIM_CONFIG_DIR = tempDir(t, 'paim-config');
@@ -225,6 +228,49 @@ test('a voice with peaks at -1.2 dBFS (what prep_voice leaves) is not touched by
     assert.ok(Math.abs(a.rms - b.rms) <= 0.1, `window ${window}: RMS ${a.rms} dB with effects, ${b.rms} dB without`);
   }
   assert.ok(loudness(kept).truePeak <= -1, `true peak ${loudness(kept).truePeak} dBFS`);
+});
+
+const OTHER_TAKE = /^timing\.json belongs to another take: run transcribe\.py and timing\.py align again$/;
+const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+const rendersOf = (dir) => (existsSync(join(dir, 'renders')) ? readdirSync(join(dir, 'renders')) : []);
+
+test('a voice replaced after the alignment (the reviewer\'s 3.0 s timing, a new 10.25 s take) is refused, exit 2, no MP4', SLOW, async (t) => {
+  const dir = project(t);
+  addVoice(dir); // an aligned timing.json of 3.0 s from before the fields below existed
+  sineWav(join(dir, 'voice', 'voice.wav'), 10.25); // prep_voice.py replaced the voice, then transcribe/align stopped
+  await assert.rejects(renderProject(dir), (e) => e.name === 'BuildError' && OTHER_TAKE.test(e.message));
+  assert.deepEqual(rendersOf(dir), [], 'no MP4 and no partial file');
+  const r = spawnSync(process.execPath, [join(SCRIPTS, 'render.mjs'), dir], { encoding: 'utf8', env: process.env, timeout: 60_000 });
+  assert.equal(r.status, 2);
+  assert.equal(r.stdout, '', 'no "150 frames" line');
+  assert.match(r.stderr.trimEnd(), OTHER_TAKE);
+  assert.deepEqual(rendersOf(dir), []);
+});
+
+test('a voice replaced by another take of the same length is refused through the hash timing.py recorded', SLOW, async (t) => {
+  const dir = project(t);
+  addVoice(dir);
+  const timing = readJson(join(dir, 'timing.json'));
+  timing.voice_sha256 = sha256(join(dir, 'voice', 'voice.wav'));
+  writeJson(join(dir, 'timing.json'), timing);
+  sineWav(join(dir, 'voice', 'voice.wav'), 3, 880); // 3.0 s as before, other bytes
+  await assert.rejects(renderProject(dir), (e) => e.name === 'BuildError' && OTHER_TAKE.test(e.message));
+  assert.deepEqual(rendersOf(dir), []);
+  // a --from/--to part draws the same wrong captions, so it is refused too
+  await assert.rejects(renderProject(dir, { from: 0, to: 1 }), (e) => OTHER_TAKE.test(e.message));
+});
+
+test('an untouched aligned project (hash recorded) renders; so does a legacy timing without the hash and a matching length', SLOW, async (t) => {
+  const dir = project(t);
+  addVoice(dir);
+  const legacy = await renderProject(dir); // no voice_sha256, voice 3.0 s = timing.duration 3.0
+  assert.equal(legacy.frames, 150);
+  const timing = readJson(join(dir, 'timing.json'));
+  timing.voice_sha256 = sha256(join(dir, 'voice', 'voice.wav'));
+  writeJson(join(dir, 'timing.json'), timing);
+  const r = await renderProject(dir);
+  assert.equal(r.frames, 150);
+  assert.ok(existsSync(r.file));
 });
 
 test('a --from/--to render is a silent part', SLOW, async (t) => {

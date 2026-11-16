@@ -7,6 +7,7 @@ On success prints one line: "estimated 30.9 s, 12 lines" or
 "aligned 65.7 s, match 0.86, lowest l07 0.75" (after any "LOW lNN ..." lines).
 """
 import difflib
+import hashlib
 import json
 import sys
 import unicodedata
@@ -167,6 +168,10 @@ def main(argv) -> int:
             _fail(f"missing {words_path}", 1)
         data = json.loads(words_path.read_text(encoding="utf-8"))
         timing = align(lines, data["words"], data["duration"])
+        # Which take this timing belongs to: render.mjs refuses a voice file that has since been replaced.
+        voice = project / "voice" / "voice.wav"
+        if voice.is_file():
+            timing["voice_sha256"] = hashlib.sha256(voice.read_bytes()).hexdigest()
         for line in timing["lines"]:
             if line["ratio"] < LOW_RATIO:
                 print(f"LOW {line['id']} {line['ratio']:.2f} {line['text']}")

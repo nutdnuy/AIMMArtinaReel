@@ -2,11 +2,14 @@
 # Opens a reel's OpenFilm export in OpenFilm Studio, the editor P.AIM changes the reel in by hand.
 # Usage: open_studio.sh <project>            opens <project>/openfilm
 #        open_studio.sh <folder>             opens a folder that holds film.html (openfilm-2, ...)
-# Runs `npx -y openfilm@latest open <folder>` and prints what it prints. Studio then keeps running in the
-# background (this script does not wait for it). Studio is hers: it may be a Studio she already had open with
+# Runs `npx -y openfilm@<version> open <folder>` and prints what it prints. The version is the one this skill was
+# checked against (set below; PAIM_OPENFILM_VERSION overrides it), never `@latest`. Studio then keeps running in
+# the background (this script does not wait for it). Studio is hers: it may be a Studio she already had open with
 # other films in it, so this script never stops it and does not say how. PAIM_STUDIO_TIMEOUT (seconds, default
 # 180) is how long the command may take; a command that stalls is stopped with everything it started.
 set -u
+
+openfilm_version="${PAIM_OPENFILM_VERSION:-0.3.2}"
 
 [ $# -eq 1 ] || { echo "usage: open_studio.sh <project>" >&2; exit 2; }
 target="$1"
@@ -35,7 +38,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 set -m # the background command gets a process group of its own (its pid is the group's id)
-npx -y openfilm@latest open "$folder" </dev/null >"$log" 2>&1 &
+npx -y "openfilm@$openfilm_version" open "$folder" </dev/null >"$log" 2>&1 &
 pid=$!
 set +m
 waited=0

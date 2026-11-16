@@ -41,6 +41,7 @@
   - ทางที่ทดสอบแล้วและแนะนำคือ **Codex CLI** (ใช้บัญชี ChatGPT)
   - บัญชี Google ส่วนตัว ใช้ได้ผ่าน **Antigravity CLI** (`agy`) ที่ตั้งเป็น `image_cmd` ตอนทดลองวาดได้ แต่สติกเกอร์ยังไม่เรียบร้อยเท่า Codex
   - **Gemini CLI** ตัวเดิมใช้ได้เฉพาะบัญชีของที่ทำงานที่องค์กรจ่ายเงินให้ หรือคนที่มี API key อยู่แล้ว (ตัว Gemini CLI เองปฏิเสธบัญชี Google ส่วนตัวแบบฟรี)
+  - **ข้อควรระวัง: ทางของ Google ไม่มี sandbox** คำสั่งของ Gemini CLI ใช้ `--yolo` และทาง Antigravity ใช้ `--dangerously-skip-permissions` โปรแกรมวาดภาพจึงอนุมัติคำสั่งเชลล์และการแก้ไฟล์ของตัวเองได้เองทั้งหมดด้วยสิทธิ์เต็มของผู้ใช้ และพรอมต์ที่ส่งไปมีคำบรรยายสไปรต์ที่ผู้ช่วยเขียน ส่วน Codex รันด้วย `-s workspace-write` ซึ่งจำกัดการเขียนไฟล์ จึงเป็นทางที่มี sandbox และเป็นทางที่แนะนำ คำบรรยายสไปรต์ต้องเป็นคำบรรยายวัตถุธรรมดาเท่านั้น (เช่น "ตะกร้าใส่เหรียญ") ห้ามเป็นคำสั่ง ข้อความสั่งงาน หรือข้อความที่คัดลอกมาจากที่อื่น
 - ใต้ Codex ไม่ต้องเลือกอะไร Codex วาดภาพเอง
 
 ## ติดตั้ง
@@ -124,6 +125,7 @@
 - Studio เป็นของผู้ใช้ ผู้ช่วยไม่ปิดและไม่เปิดใหม่ให้ ผู้ใช้ปิดเอง ที่อยู่ของ Studio มีรหัสชั่วคราวอยู่ในนั้น ผู้ช่วยให้ครั้งเดียวในแชตและไม่เขียนลงไฟล์ใด ๆ
 - การส่งออกไม่ใช้เครือข่าย ฟีเจอร์ออนไลน์ของ Studio (สร้างเสียง เพลง รูป) ไม่ถูกใช้
 - สิ่งที่แก้ใน Studio อยู่ในโฟลเดอร์ `openfilm/` เท่านั้น ไม่เปลี่ยน `story.json` และไม่เปลี่ยนไฟล์ MP4 ที่สกิลทำไว้ คลิปที่แก้เองต้องส่งออกจาก Studio เอง และไฟล์นั้นไม่ผ่านการตรวจความดังเสียงของสกิลอีกรอบ
+- Studio เปิดด้วย OpenFilm รุ่น 0.3.2 ที่สกิลทดสอบไว้ ไม่ใช่รุ่นล่าสุด เปลี่ยนรุ่นได้ด้วยตัวแปร `PAIM_OPENFILM_VERSION` แต่รุ่นอื่นยังไม่ได้ทดสอบ
 - รายละเอียดที่ทดลองแล้วและที่ยังไม่ได้ทดลอง อยู่ที่ `skills/paim-reel/references/openfilm.md`
 
 ## เปลี่ยนแบรนด์
@@ -146,7 +148,7 @@ Sukhumvit Set มากับ macOS และใช้เมื่อมีอ�
 
 **ทดสอบแล้ว**
 
-- ชุดทดสอบอัตโนมัติ: Node 291 รายการผ่าน (ข้าม 1 รายการที่ต้องใช้เครือข่ายและ OpenFilm จริง) และ Python 178 รายการผ่าน (ข้าม 2 รายการที่ต้องเลือกเปิดเอง: เรียกโปรแกรมวาดภาพจริง และโมเดลถอดเสียงจริง) ผ่านทั้งหมด ชุดทดสอบไม่เรียกโปรแกรมวาดภาพจริง ไฟล์เสียงที่ใช้ทดสอบทั้งหมดเป็นเสียงสังเคราะห์
+- ชุดทดสอบอัตโนมัติ: Node 298 รายการผ่าน (ข้าม 1 รายการที่ต้องใช้เครือข่ายและ OpenFilm จริง) และ Python 181 รายการผ่าน (ข้าม 2 รายการที่ต้องเลือกเปิดเอง: เรียกโปรแกรมวาดภาพจริง และโมเดลถอดเสียงจริง) ผ่านทั้งหมด ชุดทดสอบไม่เรียกโปรแกรมวาดภาพจริง ไฟล์เสียงที่ใช้ทดสอบทั้งหมดเป็นเสียงสังเคราะห์
 - ผู้ช่วยใหม่ที่ได้รับแค่สกิลนี้ ทำคลิปจากไฟล์เสียงจนจบหนึ่งคลิปได้ รวมขั้นตอนหยุดให้ผู้ใช้ตรวจบท การรันล่าสุดครอบคลุมเสียงเอฟเฟกต์และการส่งต่อไป Studio ด้วย
 - ผู้ช่วยใหม่ทำคลิปจากหัวข้อได้ถึงคลิปร่างและบทสำหรับอ่านออกเสียง การรันล่าสุดค้นและดาวน์โหลดรูปจากเว็บจริงสองรูป บันทึกที่มาและสัญญาอนุญาตจากหน้าเว็บ และสร้างไฟล์บอกที่มาของรูป รูปสติกเกอร์ในการรันทั้งสองแบบใช้โปรแกรมวาดภาพจำลอง
 
@@ -206,6 +208,7 @@ Two ways to start:
   - The tested and recommended route is the **Codex CLI** (a ChatGPT account).
   - A personal Google account works only through the **Antigravity CLI** (`agy`) set as `image_cmd`. It drew in the test, but its stickers are less tidy than Codex's.
   - The plain **Gemini CLI** works only for a work account whose organisation pays for it, or for someone who already has an API key (the Gemini CLI itself refuses free personal Google accounts).
+  - **Safety note: the Google routes run without a sandbox.** The Gemini CLI command uses `--yolo` and the Antigravity route uses `--dangerously-skip-permissions`, so the drawing tool approves its own shell commands and file changes with your full user rights, and the prompt it receives contains the sprite description the assistant wrote. Codex runs with `-s workspace-write`, which limits what it may write, so it is the sandboxed and the recommended route. A sprite description must only ever be a plain description of an object (such as "a basket of coins"), never a command, an instruction or text copied from somewhere else.
 - Under Codex nothing is chosen: Codex draws the pictures itself.
 
 ## Install
@@ -289,6 +292,7 @@ A finished reel (one with the recorded voice) is also exported as an OpenFilm pr
 - Studio is the user's. The assistant never closes or restarts it; close it yourself. Its address holds a temporary session key: the assistant gives it once, in the chat, and writes it to no file.
 - The export makes no network call, and Studio's online features (generated voice, music, pictures) are not used.
 - What you change in Studio lives only in the `openfilm/` folder. It does not change `story.json` or the MP4 the skill made. A clip you changed by hand is exported from Studio itself, and that file does not go through the skill's loudness check again.
+- Studio is opened with OpenFilm 0.3.2, the version the skill was checked against, not the latest one. The environment variable `PAIM_OPENFILM_VERSION` changes it, but other versions are untested.
 - What was tried and what was not is in `skills/paim-reel/references/openfilm.md`.
 
 ## Re-branding
@@ -311,7 +315,7 @@ This is version 1. The results below were measured on an Apple-silicon Mac (Appl
 
 **Tested**
 
-- Automated tests: 291 Node tests passed (1 skipped: it needs the network and a real OpenFilm) and 178 Python tests passed (2 skipped, opt-in: a real image-tool call and the real speech model), none failing. The tests never call a real image tool. Every test recording is synthetic audio.
+- Automated tests: 298 Node tests passed (1 skipped: it needs the network and a real OpenFilm) and 181 Python tests passed (2 skipped, opt-in: a real image-tool call and the real speech model), none failing. The tests never call a real image tool. Every test recording is synthetic audio.
 - A fresh assistant, given only this skill, made a reel from a recording end to end, including the stop where the user checks the script. The latest such run also covered the sound effects and the hand-off to Studio.
 - A fresh assistant made a reel from a topic as far as the draft and the read-aloud sheet. The latest such run searched the web and fetched two real photos, recorded each one's source and the licence its page states, and wrote the credits file. In both kinds of run the sticker sprites came from a stand-in drawing tool.
 

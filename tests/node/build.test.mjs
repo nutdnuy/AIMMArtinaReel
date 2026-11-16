@@ -136,6 +136,44 @@ test('an absolute story.music is not written into the build', async (t) => {
   assert.ok(!JSON.stringify(resolved).includes(music));
 });
 
+// The extension of the music and of the logo is copied into the build and, later, into attribute values of
+// film.html and the page: only a plain one (letters and digits) may pass.
+test('a music file whose extension carries markup is refused by name, and nothing is built', async (t) => {
+  const dir = project(t);
+  const hostile = `song.m'"><img src=x onerror=alert(1)>`;
+  writeFileSync(join(dir, hostile), 'RIFF');
+  const story = readStory(dir);
+  story.music = hostile;
+  writeStory(dir, story);
+  await assert.rejects(buildProject(dir), (e) => e.name === 'BuildError' && e.message.includes('story.music') && e.message.includes('song.m'));
+  assert.ok(!existsSync(join(dir, 'build')), 'the build folder is not touched');
+});
+
+test('a music or logo extension must match .[a-z0-9]{1,5}: .MP3 is lower-cased, none or too long or odd is refused', async (t) => {
+  const dir = project(t);
+  const bed = (name) => {
+    writeFileSync(join(dir, name), 'RIFF');
+    const story = readStory(dir);
+    story.music = name;
+    writeStory(dir, story);
+  };
+  bed('Bed.MP3');
+  const { resolved, buildDir } = await buildProject(dir);
+  assert.equal(resolved.music, 'assets/music.mp3');
+  assert.ok(existsSync(join(buildDir, 'assets', 'music.mp3')));
+  for (const name of ['bed', 'bed.abcdef', 'bed.m p3', 'bed.wa-v', 'bed.']) {
+    bed(name);
+    await assert.rejects(buildProject(dir), /story\.music/, name);
+  }
+
+  saveProfile({ logo: join(dir, `logo.p'"><b>`) });
+  writeFileSync(join(dir, `logo.p'"><b>`), 'x');
+  const story = readStory(dir);
+  delete story.music;
+  writeStory(dir, story);
+  await assert.rejects(buildProject(dir), (e) => e.name === 'BuildError' && /logo/.test(e.message) && e.message.includes('logo.p'));
+});
+
 // mini as one centred photo item.
 function photoProject(t, { photo = 'old-bank', ...options } = {}) {
   const dir = project(t);

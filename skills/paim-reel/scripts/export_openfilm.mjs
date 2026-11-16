@@ -5,7 +5,7 @@
 // The folder holds film.html (the edit: tracks of clips), one page per scene plus one for the end card, and the
 // files they load. A page is our own page.html with our own engine/ and data.js; a thin wrapper sets
 // window.film = {frame(t), duration, ready}, and frame(t) is __paim.seek(sceneStart + t). There is no second
-// drawing code. Format: OpenFilm's SPEC.md, `npx -y openfilm@latest skill edit`, and references/openfilm.md.
+// drawing code. Format: OpenFilm's SPEC.md, `npx -y openfilm@0.3.2 skill edit`, and references/openfilm.md.
 //
 // Only a final reel is exported: a project whose timing is still estimated (a draft) is refused with one sentence.
 //
@@ -17,8 +17,8 @@ import {
 } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { buildProject, BuildError, exitWithError, isMain } from './build.mjs';
+import { assertVoiceMatchesTiming, mediaSeconds } from './voice_match.mjs';
 import { sfxEvents, loadSounds, SFX_RATE, SFX_DIR } from '../lib/sfx.mjs';
 
 const MANIFEST = '.paim-export.json';
@@ -29,18 +29,6 @@ const ms = (seconds) => Math.round(seconds * 1000);
 const floorMs = (seconds) => Math.floor(seconds * 1000 + 1e-6);
 const sec = (millis) => String(millis / 1000);
 const volumeOf = (db) => (10 ** (db / 20)).toFixed(4);
-
-// Length in seconds of an audio file, from ffprobe.
-function mediaSeconds(file) {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], {
-    encoding: 'utf8', timeout: 30_000,
-  });
-  const seconds = Number(r.stdout?.trim());
-  if (r.error || r.status !== 0 || !(seconds > 0)) {
-    throw new BuildError(`cannot read the length of ${file} (ffprobe is needed: run doctor.sh)`);
-  }
-  return seconds;
-}
 
 // The page of one span of the reel: build/index.html with the OpenFilm wrapper after the runtime.
 function pageOf(indexHtml, start, span, length) {
@@ -59,11 +47,13 @@ function pageOf(indexHtml, start, span, length) {
   return indexHtml.replace('</head>', `${wrapper}</head>`);
 }
 
-// A clip element. A value that holds double quotes (the overrides JSON) goes in single quotes, as in OpenFilm's SPEC.
-const quoted = (v) => (v.includes('"') ? `'${v}'` : `"${v}"`);
-const clip = (tag, attrs) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}=${quoted(v)}`).join(' ')}></${tag}>`;
+// A clip element. Every attribute value is HTML-escaped (& " ' < >) and double-quoted; OpenFilm decodes the
+// entities when it reads film.html (the overrides JSON included), so no value can end its attribute or open a tag.
+const escapeAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+export const clip = (tag, attrs) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${escapeAttr(v)}"`).join(' ')}></${tag}>`;
 const track = (title, clips) => ({ title, clips });
-const trackHtml = ({ title, clips }) => `<section title="${title}">\n  ${clips.join('\n  ')}\n</section>`;
+export const trackHtml = ({ title, clips }) => `<section title="${escapeAttr(title)}">\n  ${clips.join('\n  ')}\n</section>`;
 
 // Effect clips spread over as few tracks as will hold them: clips on one track must not overlap.
 function effectTracks(events, sounds, total) {
@@ -204,6 +194,7 @@ export async function exportOpenfilm(projectDir) {
   if (resolved.estimated) {
     throw new BuildError('This reel is still a draft (its timing is estimated, there is no voice yet): the OpenFilm export happens once her voice is in.');
   }
+  assertVoiceMatchesTiming(projectDir); // before anything is written
   const staging = mkdtempSync(join(projectDir, '.openfilm-staging-'));
   try {
     const clips = writeExport(staging, projectDir, buildDir, resolved);

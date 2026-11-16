@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { buildProject, BuildError, exitWithError, isMain } from './build.mjs';
+import { assertVoiceMatchesTiming } from './voice_match.mjs';
 import { openPage } from '../lib/serve.mjs';
 import { sfxEvents, loadSounds, mixBed, writeFloatWav } from '../lib/sfx.mjs';
 
@@ -88,6 +89,7 @@ export async function renderProject(projectDir, opts = {}) {
   projectDir = resolve(projectDir);
   const fps = 30;
   const { resolved, buildDir } = await buildProject(projectDir);
+  assertVoiceMatchesTiming(projectDir); // a stale timing.json would caption another take
   const total = Math.round(resolved.duration * fps);
   const partial = opts.from !== undefined || opts.to !== undefined;
   const first = Math.round((opts.from ?? 0) * fps);
