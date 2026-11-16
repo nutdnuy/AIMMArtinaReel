@@ -6,7 +6,7 @@ description: Makes a 9:16 P.AIM-branded finance explainer reel (MP4 with Thai ca
 # paim-reel
 
 Turn a finance topic, or P.AIM's recorded voice, into a 1080×1920 explainer reel in the P.AIM
-brand: a few large stickers that pop and regroup on a faint grid, one bold caption phrase at a
+brand: a few large stickers that pop and regroup on handmade paper, one bold caption phrase at a
 time, a green end card.
 
 `<skill>` is this skill's folder; run every script by its path (Python with

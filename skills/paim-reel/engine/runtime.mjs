@@ -5,6 +5,7 @@ import { textColorOn } from './colors.mjs';
 import { captionAt } from './captions.mjs';
 import { W, H, HEADLINE, CAPTION } from './layout.mjs';
 import { ENTER_DUR, MARK_DUR, enterState, itemState, progress, numberAt, barAt } from './motion.mjs';
+import { hashSeed, mottle, paintPaper, paintSheet } from './paper.mjs';
 
 const PRIMARY = 'Sukhumvit Set';
 const FALLBACK = 'IBM Plex Sans Thai';
@@ -16,6 +17,7 @@ const ARROW_MIN = 90; // px; shorter arrows are lengthened around their midpoint
 const ARROW_HEAD = 44;
 const RING_PAD = 16; // px between a picture and its ring
 const RING_CLEAR = 8; // px from the ring's centre line to a label: half the 12 px stroke, plus 2
+const FRAME_INSET = 36; // px of the frame colour around a scene's torn sheet of paper
 
 const DATA = window.__PAIM_DATA;
 const stage = document.getElementById('stage');
@@ -73,6 +75,59 @@ function fitFont(text, fits, max, min) {
     text.style.fontSize = `${size}px`;
   }
   return fits();
+}
+
+// ---------- paper: every background is painted once, in build(), and only shown or hidden by seek()
+
+function paperCanvas() {
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  return c;
+}
+
+// Paints the papers the reel needs. Returns {keyOf(scene) -> canvas key, canvases: Map key -> canvas
+// in the background layer, endCard: canvas}. All of them come from one seed, the slug's.
+function buildPapers(R, layer) {
+  const colors = DATA.brand.colors;
+  const seed = hashSeed(R.slug);
+  const field = mottle(seed, W, H);
+  // An ink the same colour as the paper would vanish: it is drawn in cream instead.
+  const inksOn = (name) => Object.fromEntries(['orange', 'green', 'charcoal'].map((k) => [k, colors[k === name ? 'cream' : k]]));
+  const painted = new Map();
+  const paper = (name, s = seed) => {
+    const key = `${name}:${s}`;
+    if (!painted.has(key)) {
+      const c = paperCanvas();
+      paintPaper(c.getContext('2d'), { w: W, h: H, seed: s, base: colors[name], inks: inksOn(name), field });
+      painted.set(key, c);
+    }
+    return painted.get(key);
+  };
+  const keyOf = (scene) => (scene.frame ? `${scene.bg}/${scene.frame}` : scene.bg);
+  const canvases = new Map();
+  for (const scene of R.scenes) {
+    const key = keyOf(scene);
+    if (canvases.has(key)) continue;
+    let c;
+    if (scene.frame) {
+      // The sheet's own fibres and flecks differ from the backdrop's (seed + 1), as two papers would.
+      c = paperCanvas();
+      c.dataset.sheet = key;
+      paintSheet(c.getContext('2d'), {
+        w: W, h: H, seed, inset: FRAME_INSET,
+        backdrop: paper(scene.frame, seed + 1), sheet: paper(scene.bg), sheetColor: colors[scene.bg],
+      });
+    } else {
+      c = paper(scene.bg);
+      c.dataset.paper = scene.bg;
+    }
+    layer.append(c);
+    canvases.set(key, c);
+  }
+  const endCard = paper('green');
+  endCard.dataset.paper = 'green';
+  return { keyOf, canvases, endCard };
 }
 
 // ---------- build: one DOM tree for the whole reel, made once
@@ -280,8 +335,9 @@ function buildScene(scene) {
   return { scene, root, items, headline, marks };
 }
 
-function buildEndCard(card) {
+function buildEndCard(card, paper) {
   const root = el('div', 'endcard', stage);
+  root.append(paper);
   const body = el('div', 'endcard-body', root);
   const follow = el('div', 'follow text', body, 'ติดตาม');
   const rest = [];
@@ -304,11 +360,12 @@ function build(R) {
   if (DATA.forceFallback) root.setProperty('--font', `"${FALLBACK}", sans-serif`);
 
   view = { R, bg: el('div', 'bg', stage), scenesLayer: el('div', 'scene-layer', stage) };
+  view.papers = buildPapers(R, view.bg);
   view.scenes = R.scenes.map(buildScene);
   view.captionZone = el('div', 'caption-zone', stage);
   place(view.captionZone, CAPTION);
   view.caption = el('div', 'caption text', view.captionZone);
-  view.endCard = buildEndCard(R.endCard);
+  view.endCard = buildEndCard(R.endCard, view.papers.endCard);
   if (R.estimated) el('div', 'text', el('div', 'draft', stage), 'DRAFT · ยังไม่มีเสียง');
 }
 
@@ -397,6 +454,8 @@ function seek(time) {
     : view.scenes.find((sv) => t >= sv.scene.t0 && t < sv.scene.t1) ?? view.scenes[view.scenes.length - 1];
   for (const sv of view.scenes) display(sv.root, sv === current);
   view.bg.className = current ? `bg ${current.scene.bg}` : 'bg';
+  const paper = current ? view.papers.keyOf(current.scene) : null;
+  for (const [key, c] of view.papers.canvases) display(c, key === paper);
   if (current) drawScene(current, t);
   drawCaption(current ? captionAt(R.captions, t) : null, current?.scene.bg, t);
   drawEndCard(ending, t);

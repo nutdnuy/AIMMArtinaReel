@@ -12,8 +12,28 @@ what the engine allows, and before judging a contact sheet.
 | `charcoal` | `#252B31` | main text; the background of contrast scenes |
 | `cream` | `#FFFAF0` | the soft default background |
 
-Scene backgrounds are `cream` (default) or `charcoal`. Both carry a faint 108 px grid drawn in the
-text colour at 6%. Use a charcoal scene for a turn in the story (a risk, a cost, a "but").
+Scene backgrounds are `cream` (default) or `charcoal`. Use a charcoal scene for a turn in the story
+(a risk, a cost, a "but").
+
+## Paper
+
+Every background is handmade paper in the scene colour (the end card in green), painted by our own
+code (`engine/paper.mjs`; no picture or texture file is used):
+
+- soft mottling and pulp relief within ±3% lightness;
+- 260 raised fibres, 40-220 px long, 1-2 px wide, ±6% lightness;
+- 46 flecks of pressed petal, 6-26 px, at 55% opacity, in muted orange, green and charcoal (on
+  charcoal paper cream instead of charcoal; on green paper cream instead of green). A large fleck is
+  muted further, so it never moves a patch of paper by more than a few levels.
+
+The paper is seeded from the story's `slug`: it is painted once when the page loads and is the same
+in every frame and on every render. Any 40 × 40 px patch of it averages within 10 levels (per RGB
+channel) of the scene colour, so the text pairs below keep their contrast.
+
+A scene's `frame` (`orange`, `green` or `charcoal`) shows its paper as a torn sheet laid over paper of
+that colour: 36 px of the frame colour shows around it, the tear wanders up to 14 px further in, with
+a soft shadow, a thinned see-through margin and a few loose fibres. Every text zone lies inside the
+sheet. Use a frame sparingly, for one scene that should stand apart (the key point, the takeaway).
 
 Colour use in a story: give the thing each line is about `orange`; give growth or the safer
 option `green`; keep `charcoal`/`cream` icons for neutral things. One orange subject per scene

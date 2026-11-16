@@ -7,6 +7,7 @@ import { buildProject } from '../../skills/paim-reel/scripts/build.mjs';
 import { renderProject } from '../../skills/paim-reel/scripts/render.mjs';
 import { stills } from '../../skills/paim-reel/scripts/still.mjs';
 import { saveProfile } from '../../skills/paim-reel/lib/profile.mjs';
+import { StoryError } from '../../skills/paim-reel/lib/story.mjs';
 import { openPage } from '../../skills/paim-reel/lib/serve.mjs';
 import { ENTER_DUR } from '../../skills/paim-reel/engine/motion.mjs';
 import { copyFixture, tempDir, sineWav, solidPng, ffprobe } from '../helpers.mjs';
@@ -57,10 +58,30 @@ async function pixelAt(page, png, x, y) {
   }, [png.toString('base64'), x, y]);
 }
 
+// The mean RGB of the w x h patch whose top-left corner is (x, y), in a PNG buffer.
+async function patchMean(page, png, x, y, w = 40, h = 40) {
+  return page.evaluate(async ([b64, px, py, pw, ph]) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(px, py, pw, ph).data;
+    const sum = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) for (let k = 0; k < 3; k += 1) sum[k] += d[i + k];
+    return sum.map((v) => v / (pw * ph));
+  }, [png.toString('base64'), x, y, w, h]);
+}
+
 const near = (rgb, hex, tol = 12) => {
   const want = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   return rgb.every((v, i) => Math.abs(v - want[i]) <= tol);
 };
+
+const BRAND = { cream: '#FFFAF0', charcoal: '#252B31', green: '#14856D', orange: '#F5820B' };
 
 test('silent draft from estimated timing', SLOW, async (t) => {
   const dir = project(t);
@@ -111,15 +132,91 @@ test('frames are deterministic', SLOW, async (t) => {
   });
 });
 
+test('two page loads draw the same frame', SLOW, async (t) => {
+  const dir = project(t);
+  const shot = () => withPage(dir, async (page) => {
+    await seek(page, 1.0);
+    return page.screenshot({ type: 'png' });
+  });
+  const a = await shot();
+  const b = await shot();
+  assert.ok(a.equals(b), 'the paper must not change between page loads');
+});
+
 test('the frame actually shows the brand', SLOW, async (t) => {
   await withPage(project(t), async (page) => {
     await seek(page, 2.6);
-    assert.ok(near(await pixelAt(page, await page.screenshot({ type: 'png' }), 20, 20), '#FFFAF0'), 'cream at 2.6 s');
+    const cream = await patchMean(page, await page.screenshot({ type: 'png' }), 20, 20);
+    assert.ok(near(cream, BRAND.cream, 10), `cream paper at 2.6 s: ${cream}`);
     const boxes = await page.evaluate(() => window.__paim.textBoxes());
     assert.ok(boxes.some((b) => b.kind === 'caption' && b.text === 'ตะกร้าหุ้น'), JSON.stringify(boxes));
     await seek(page, 4.5);
-    assert.ok(near(await pixelAt(page, await page.screenshot({ type: 'png' }), 20, 20), '#14856D'), 'green end card');
+    const green = await patchMean(page, await page.screenshot({ type: 'png' }), 20, 20);
+    assert.ok(near(green, BRAND.green, 10), `green end card: ${green}`);
   });
+});
+
+test('every 40 px patch of paper stays within 10 levels of its colour', SLOW, async (t) => {
+  const dir = project(t);
+  const story = readJson(join(dir, 'story.json'));
+  const etf = story.scenes[0].items.pop();
+  story.scenes.push({ id: 's2', from: 'l02', layout: 'center', bg: 'charcoal', items: [etf] });
+  writeJson(join(dir, 'story.json'), story);
+  await withPage(dir, async (page) => {
+    // Worst patch per paper canvas, over a 40 x 40 window moved in 8 px steps (summed-area table).
+    const worst = await page.evaluate(() => [...document.querySelectorAll('canvas[data-paper]')].map((c) => {
+      const { width: w, height: h } = c;
+      const d = c.getContext('2d').getImageData(0, 0, w, h).data;
+      const want = getComputedStyle(document.documentElement).getPropertyValue(`--${c.dataset.paper}`).trim();
+      const base = [1, 3, 5].map((i) => parseInt(want.slice(i, i + 2), 16));
+      let max = 0;
+      for (let k = 0; k < 3; k += 1) {
+        const S = new Float64Array((w + 1) * (h + 1));
+        for (let y = 0; y < h; y += 1) {
+          let row = 0;
+          for (let x = 0; x < w; x += 1) {
+            row += d[(y * w + x) * 4 + k];
+            S[(y + 1) * (w + 1) + x + 1] = S[y * (w + 1) + x + 1] + row;
+          }
+        }
+        for (let y = 0; y + 40 <= h; y += 8) {
+          for (let x = 0; x + 40 <= w; x += 8) {
+            const sum = S[(y + 40) * (w + 1) + x + 40] - S[y * (w + 1) + x + 40] - S[(y + 40) * (w + 1) + x] + S[y * (w + 1) + x];
+            max = Math.max(max, Math.abs(sum / 1600 - base[k]));
+          }
+        }
+      }
+      return { paper: c.dataset.paper, max };
+    }));
+    assert.deepEqual(worst.map((p) => p.paper).sort(), ['charcoal', 'cream', 'green']);
+    for (const p of worst) assert.ok(p.max <= 10, `${p.paper}: a patch is ${p.max.toFixed(1)} levels off`);
+  });
+});
+
+test('a frame scene is a torn sheet of paper over the frame colour', SLOW, async (t) => {
+  const dir = project(t);
+  const story = readJson(join(dir, 'story.json'));
+  story.scenes[0].frame = 'orange';
+  writeJson(join(dir, 'story.json'), story);
+  await withPage(dir, async (page) => {
+    await seek(page, 1.0); // only the top item is in, so (540, 960) is bare paper
+    const png = await page.screenshot({ type: 'png' });
+    const edge = await patchMean(page, png, 0, 940, 20, 40);
+    assert.ok(near(edge, BRAND.orange, 10), `orange backdrop at (10, 960): ${edge}`);
+    const paper = await patchMean(page, png, 520, 940);
+    assert.ok(near(paper, BRAND.cream, 10), `cream paper at (540, 960): ${paper}`);
+    await seek(page, 2.5);
+    await seek(page, 1.0);
+    assert.ok(png.equals(await page.screenshot({ type: 'png' })), 'seek(1.0) after seek(2.5) gives the same bytes');
+  });
+});
+
+test('an unknown frame colour is a StoryError', async (t) => {
+  const dir = project(t);
+  const story = readJson(join(dir, 'story.json'));
+  story.scenes[0].frame = 'purple';
+  writeJson(join(dir, 'story.json'), story);
+  await assert.rejects(buildProject(dir), (e) => e instanceof StoryError && /frame "purple"/.test(e.message));
 });
 
 test('a sprite is drawn', SLOW, async (t) => {

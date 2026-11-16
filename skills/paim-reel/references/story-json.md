@@ -10,7 +10,7 @@ every problem at once (one per line, exit 2).
 ```
 story  {slug: /^[a-z0-9-]+$/, title: string, music?: string|null, highlight?: Anchor[], scenes: Scene[]}
 Scene  {id, from: "lNN", layout: center|row|stack|versus|grid, bg?: cream|charcoal (default cream),
-        headline?: {text, at?: Anchor}, items: Item[], marks?: Mark[]}
+        frame?: orange|green|charcoal, headline?: {text, at?: Anchor}, items: Item[], marks?: Mark[]}
 Item   common: {id, type, at: Anchor, slot?: int (default = index), enter?: pop|drop|slide-l|slide-r|rise|fade (default pop),
                 idle?: none|bob|sway|pulse (default none), exit?: Anchor, x?, y?, size?}
        sprite: {sprite: /^[a-z0-9-]+$/, label?: string}        # <project>/gen/sprites/<sprite>.png
@@ -41,6 +41,10 @@ Anchor "l05" (line start) | "l05@2" (0-based phrase index) | either + "+0.2" / "
   last line, so no caption shows over the end card.
 - `highlight` lists anchors (offsets ignored; a bare `l05` means its first phrase). A highlighted
   phrase is drawn charcoal on an orange pill.
+- `frame` (optional): the scene's paper becomes a torn sheet over paper of that colour, 36 px of it
+  showing round the edge. Layout, text zones and text colours do not change (the text is on the
+  sheet, which is still `bg`). Any other value is a build problem. Without `frame` the scene's paper
+  fills the canvas.
 - `music` (optional): an audio file, absolute or relative to the project folder, mixed at
   -30 dB under the voice in the final render and faded out over the end card.
 
@@ -108,7 +112,8 @@ Every frame is a function of time alone, so any frame renders the same in any or
 ## Writing a good story
 
 - One scene per idea, usually one or two lines each. Use a `charcoal` scene for the turn (a risk,
-  a cost, a "but"); keep most scenes `cream`.
+  a cost, a "but"); keep most scenes `cream`. A `frame` sets one scene apart (the key point or the
+  takeaway); one or two per reel is plenty.
 - Something new (a scene, an item, a mark or a headline) at least every 3.0 s, or `check.mjs`
   reports a dead beat. Bring items in on the phrase that names them (`l03@1`), not all at the
   line start.

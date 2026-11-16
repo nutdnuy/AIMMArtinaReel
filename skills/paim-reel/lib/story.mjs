@@ -19,6 +19,7 @@ const FREE_SIZE = 240;
 
 const LAYOUTS = Object.keys(CAPACITY);
 const SCENE_BGS = ['cream', 'charcoal'];
+const FRAMES = ['orange', 'green', 'charcoal'];
 const ITEM_TYPES = ['sprite', 'icon', 'pill', 'number', 'bar'];
 const ENTERS = ['pop', 'drop', 'slide-l', 'slide-r', 'rise', 'fade'];
 const IDLES = ['none', 'bob', 'sway', 'pulse'];
@@ -142,6 +143,7 @@ export function validateStory(story, timing, brand, assets = { sprites: [] }) {
     const layout = pick(sc.layout, LAYOUTS, 'layout', label, undefined);
     if (sc.layout === undefined) add(label, `layout is required: use ${list(LAYOUTS)}`);
     const bg = pick(sc.bg, SCENE_BGS, 'bg', label, 'cream');
+    const frame = pick(sc.frame, FRAMES, 'frame', label, undefined);
 
     // Is time `t` inside this scene? Records a problem when it is not.
     function checkInside(t, where, what) {
@@ -322,6 +324,7 @@ export function validateStory(story, timing, brand, assets = { sprites: [] }) {
     });
 
     const resolved = { id: sc.id, t0, t1: ends[si], layout, bg };
+    if (frame) resolved.frame = frame;
     if (headline) resolved.headline = headline;
     resolved.items = built.filter(Boolean).map((b) => b.out);
     resolved.marks = marks;

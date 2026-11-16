@@ -43,22 +43,12 @@ html, body {
   overflow-wrap: break-word;
 }
 
-/* ---- background: 108 px grid at 6% of the text colour */
+/* ---- background: handmade paper, painted once on a canvas per scene look by runtime.mjs (paper.mjs).
+   The plain colour only shows if a canvas is missing. */
 .bg { position: absolute; inset: 0; }
-.bg.cream {
-  background-color: var(--cream);
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--charcoal) 6%, transparent) 2px, transparent 2px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--charcoal) 6%, transparent) 2px, transparent 2px);
-  background-size: 108px 108px;
-}
-.bg.charcoal {
-  background-color: var(--charcoal);
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--cream) 6%, transparent) 2px, transparent 2px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--cream) 6%, transparent) 2px, transparent 2px);
-  background-size: 108px 108px;
-}
+.bg.cream { background-color: var(--cream); }
+.bg.charcoal { background-color: var(--charcoal); }
+.bg canvas, .endcard > canvas { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
 
 .scene-layer, .scene { position: absolute; inset: 0; }
 
